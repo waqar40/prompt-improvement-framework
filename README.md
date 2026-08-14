@@ -9,6 +9,11 @@ The whole point is a feedback loop: one prompt teaches you nothing; a few hundre
 and honestly reviewed prompts show you your actual habits — the good ones to keep and the
 lazy ones to kill.
 
+> **Every `/command` in this README (`/configure`, `/analyse`, `/scaffold-asset`, …) is a
+> Claude Code slash command.** Type it into the Claude Code chat prompt itself — **not**
+> your OS terminal (bash/zsh/PowerShell). You need the [Claude Code CLI](https://docs.claude.com/en/docs/claude-code)
+> installed and a `claude` session open in the clone before Part A, step 2.
+
 ---
 
 ## How it works
@@ -76,7 +81,16 @@ git clone <this-repo-url> "D:\code\prompt-improvement-framework"      # Windows
 
 ### 2. Run `/configure` (one step)
 
-Open Claude Code **in the clone** and run:
+`/configure` is a **Claude Code slash command, not a shell command** — running it in
+Terminal/PowerShell will just fail as "command not found". From the clone directory, start
+a Claude Code session:
+
+```bash
+cd ~/prompt-journal   # or wherever you cloned it
+claude
+```
+
+Then, **inside that Claude Code chat prompt**, type:
 
 ```
 /configure
