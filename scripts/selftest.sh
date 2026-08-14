@@ -96,6 +96,37 @@ sys.exit(0 if any('custom-j' in c for c in cmds) else 1)" && pass "--journal bak
 else skip "no python3 — configure.sh JSON assertions"; fi
 
 # ---------------------------------------------------------------------------------------------
+section "configure.sh — guide-rendering deps are best-effort, never blocking"
+if [ "$HAVE_PY" -eq 1 ]; then
+  S2="$SB/settings-deps.json"
+  out2="$(bash "$REPO/scripts/configure.sh" --settings "$S2" 2>&1)"
+  echo "$out2" | grep -qE "^\[(OK|FIXED)\][[:space:]]+Guide PDF/Word deps|^\[FIXED\][[:space:]]+Installed pinned guide-rendering deps|^\[OPTIONAL\][[:space:]]+PDF/Word guide views need" \
+    && pass "configure.sh reports guide-deps status as OK/FIXED/OPTIONAL" \
+    || fail "configure.sh did not report a guide-deps status line: $out2"
+  echo "$out2" | grep -qE "^\[ACTION\].*(reportlab|python-docx|guide)" \
+    && fail "guide-rendering deps must never surface as a blocking [ACTION]" \
+    || pass "guide-rendering deps never block configure (no [ACTION] for them)"
+else skip "no python3 — configure.sh guide-deps assertions"; fi
+
+# ---------------------------------------------------------------------------------------------
+section "scripts/requirements.txt — reportlab pinned below 4.2 (Python 3.8 hashlib compat)"
+REQS_FILE="$REPO/scripts/requirements.txt"
+if [ -f "$REQS_FILE" ]; then
+  pass "scripts/requirements.txt exists"
+  if [ "$HAVE_PY" -eq 1 ]; then
+    python3 - "$REQS_FILE" <<'PY' && pass "reportlab pin is <4.2 and python-docx is pinned" || fail "requirements.txt pin check failed"
+import re, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+m = re.search(r'^reportlab==(\d+)\.(\d+)(?:\.\d+)?\s*$', text, re.MULTILINE)
+assert m, "reportlab==X.Y not pinned in requirements.txt"
+major, minor = int(m.group(1)), int(m.group(2))
+assert (major, minor) < (4, 2), f"reportlab pin {major}.{minor} is not below 4.2 (needed for Python 3.8 hashlib compat)"
+assert re.search(r'^python-docx==\S+\s*$', text, re.MULTILINE), "python-docx==X.Y.Z not pinned in requirements.txt"
+PY
+  else skip "no python3 — requirements.txt pin regex check"; fi
+else fail "scripts/requirements.txt is missing"; fi
+
+# ---------------------------------------------------------------------------------------------
 section "header parser — new, spaced-root, and legacy headers"
 if [ "$HAVE_PY" -eq 1 ]; then
   python3 - "$FIX/logs" <<'PY' && pass "parser handles new + spaced + legacy headers" || fail "parser rejected a header"
@@ -120,7 +151,7 @@ if [ "$HAVE_PY" -eq 1 ]; then
   cp "$FIX/guide-sample.json" "$SB/g.json"
   rerr="$(python3 "$REPO/scripts/render-guide.py" "$SB/g.json" --md 2>&1)"; rc=$?
   if [ $rc -ne 0 ]; then
-    echo "$rerr" | grep -qiE "ModuleNotFound|ImportError" && skip "render-guide deps missing (reportlab/docx import) — md path" || fail "render-guide --md failed: $rerr"
+    echo "$rerr" | grep -qiE "ModuleNotFound|ImportError|missing dependency" && skip "render-guide deps missing (reportlab/docx import) — md path" || fail "render-guide --md failed: $rerr"
   else
     grep -q "## Snapshot" "$SB/g.md" && pass "render-guide wrote Markdown with Snapshot" || fail "no Snapshot in rendered md"
     grep -q "Coverage:"   "$SB/g.md" && pass "render-guide shows the new Coverage line"  || fail "Coverage line missing from md"

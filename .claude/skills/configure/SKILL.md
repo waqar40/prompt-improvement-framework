@@ -1,6 +1,6 @@
 ---
 name: configure
-description: Use to set up (or repair) the prompt-journal recorder hook in one step after cloning this repo — the /configure command. Detects the operating system, wires a UserPromptSubmit hook into the user's Claude Code settings so every prompt in every repo is captured into a sibling prompts/ folder beside the clone (relocatable with --journal), auto-fixes what it can (missing journal dir, stale/duplicate hooks, executable bit, missing settings.json), self-tests the recorder, and only asks the user to act when unavoidable — with clear, copy-pasteable steps. Triggers include "configure", "set up the hook", "install the recorder", "wire up prompt logging", "fix my prompt journal hook".
+description: Use to set up (or repair) the prompt-journal recorder hook in one step after cloning this repo — the /configure command. Detects the operating system, wires a UserPromptSubmit hook into the user's Claude Code settings so every prompt in every repo is captured into a sibling prompts/ folder beside the clone (relocatable with --journal), auto-fixes what it can (missing journal dir, stale/duplicate hooks, executable bit, missing settings.json, the pinned PDF/Word guide-rendering deps), self-tests the recorder, and only asks the user to act when unavoidable — with clear, copy-pasteable steps. Triggers include "configure", "set up the hook", "install the recorder", "wire up prompt logging", "fix my prompt journal hook".
 ---
 
 # Configure the prompt-journal recorder hook
@@ -18,6 +18,13 @@ hook in the **global** `~/.claude/settings.json` by default (so prompts from *ev
 are captured), point it at this clone's `scripts/record-prompt.*`, and land logs in a sibling
 `prompts/` folder beside the clone (`<clone>/../prompts`) — kept out of the repo. Pass
 `--journal <path>` (bash) / `-JournalDir <path>` (PowerShell) to relocate the journal.
+
+Both also best-effort install the pinned PDF/Word guide-rendering deps
+(`scripts/requirements.txt` — `reportlab==4.1.0`, `python-docx==1.1.2`; reportlab is capped
+below 4.2 because 4.2+ needs Python 3.9+'s `hashlib.md5(usedforsecurity=...)`) so
+`/analyse`'s guide renders in all three formats out of the box. This step is **optional and
+never blocking** — the Markdown view, and the whole rest of the pipeline, work with no Python
+deps at all; only `--pdf`/`--docx` need them.
 
 ## Workflow
 
@@ -39,6 +46,9 @@ hook scoped to this repo instead of all repos.
 ### Step 3 — Interpret the output
 The script prints tagged lines. Relay them faithfully:
 - `[OK]` — already correct or verified. `[FIXED]` — the script auto-resolved it.
+- `[OPTIONAL]` — a non-blocking gap in the PDF/Word guide-rendering deps only; mention it but
+  don't treat it as unfinished setup. Give the printed `pip install -r scripts/requirements.txt`
+  command if the user wants those formats.
 - `[ACTION]` — needs the human. Surface each `[ACTION]` line as a numbered, concrete step
   (e.g. "install PowerShell 7", "install jq or python3", "fix invalid JSON in settings.json").
 
@@ -48,9 +58,10 @@ Exit `2` = could not proceed (missing prerequisite) — the message says what to
 ### Step 4 — Report
 Tell the user, in this order:
 1. Whether the hook is now installed and the **self-test passed**.
-2. What was auto-fixed (`[FIXED]` lines), if anything.
-3. Any remaining `[ACTION]` steps — only if present; otherwise say none are needed.
-4. **Restart Claude Code / start a new session** so it reloads `settings.json`, after which
+2. What was auto-fixed (`[FIXED]` lines), if anything — including the guide-rendering deps.
+3. Any `[OPTIONAL]` line — mention once, in passing; it does not mean setup is incomplete.
+4. Any remaining `[ACTION]` steps — only if present; otherwise say none are needed.
+5. **Restart Claude Code / start a new session** so it reloads `settings.json`, after which
    every prompt is logged to the sibling `<clone>/../prompts/`. Then `/analyse` (defaulting to
    `../prompts`) runs the review pipeline.
 

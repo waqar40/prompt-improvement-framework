@@ -26,7 +26,7 @@ $RecordScript = Join-Path $PSScriptRoot 'record-prompt.ps1'
 if (-not $explicitJournal) { $JournalDir = Join-Path (Split-Path $RepoRoot -Parent) 'prompts' }
 $JournalDir   = [System.IO.Path]::GetFullPath($JournalDir)
 
-$ok = @(); $fixed = @(); $actions = @()   # collected for the final report
+$ok = @(); $fixed = @(); $actions = @(); $optional = @()   # collected for the final report
 
 function Say([string]$tag, [string]$msg) { Write-Host ("[{0}] {1}" -f $tag, $msg) }
 
@@ -160,12 +160,39 @@ try {
 if ($selfTestOk) { $ok += "Self-test passed — recorder writes a log entry" }
 else { $actions += "Self-test did not produce a log entry. Run the recorder manually to see the error: echo '{}' | $exe -NoProfile -File `"$RecordScript`"" }
 
+# --- Optional: guide-rendering deps (PDF/Word views of the per-user guide) --------------------
+# Not required for recording or scoring prompts — only /analyse's PDF/Word render step needs
+# these. Best-effort: install the pinned versions (scripts\requirements.txt) so plain `python`
+# renders correctly (reportlab must stay <4.2 to work on Python 3.8's hashlib); never block
+# configuration on this, and never fail the run because of it.
+$reqs = Join-Path $PSScriptRoot 'requirements.txt'
+$pythonExe = $null
+foreach ($cand in 'python', 'python3', 'py') {
+    if (Get-Command $cand -ErrorAction SilentlyContinue) { $pythonExe = $cand; break }
+}
+if ($pythonExe) {
+    & $pythonExe -c "import reportlab, docx" 2>$null
+    $depsOk = ($LASTEXITCODE -eq 0)
+    if ($depsOk) {
+        $ok += "Guide PDF/Word deps present (reportlab, python-docx)"
+    } else {
+        & $pythonExe -m pip install --quiet -r $reqs 2>$null | Out-Null
+        & $pythonExe -c "import reportlab, docx" 2>$null
+        $depsOk = ($LASTEXITCODE -eq 0)
+        if ($depsOk) { $fixed += "Installed pinned guide-rendering deps (pip install -r $reqs)" }
+        else { $optional += "PDF/Word guide views need: $pythonExe -m pip install -r $reqs (Markdown view always works without them)" }
+    }
+} else {
+    $optional += "No python found on PATH — skipping guide PDF/Word deps (Markdown view still works without them)"
+}
+
 # --- Report -----------------------------------------------------------------------------------
 Write-Host ""
 Write-Host "prompt-journal recorder — configuration summary" -ForegroundColor Cyan
-foreach ($m in $ok)      { Say 'OK'     $m }
-foreach ($m in $fixed)   { Say 'FIXED'  $m }
-foreach ($m in $actions) { Say 'ACTION' $m }
+foreach ($m in $ok)       { Say 'OK'       $m }
+foreach ($m in $fixed)    { Say 'FIXED'    $m }
+foreach ($m in $optional) { Say 'OPTIONAL' $m }
+foreach ($m in $actions)  { Say 'ACTION'   $m }
 Write-Host ""
 if ($actions.Count -eq 0 -and $selfTestOk) {
     Write-Host "Done. Restart Claude Code (or start a new session) so it reloads settings." -ForegroundColor Green
