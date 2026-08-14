@@ -12,7 +12,33 @@ lazy ones to kill.
 > **Every `/command` in this README (`/configure`, `/analyse`, `/scaffold-asset`, …) is a
 > Claude Code slash command.** Type it into the Claude Code chat prompt itself — **not**
 > your OS terminal (bash/zsh/PowerShell). You need the [Claude Code CLI](https://docs.claude.com/en/docs/claude-code)
-> installed and a `claude` session open in the clone before Part A, step 2.
+> installed. Only `scripts/render-guide.py` (Part D) is a real shell command.
+
+---
+
+## Quick start (4 steps)
+
+1. **Clone the repo** somewhere stable — everyone keeps their own clone and their own journal.
+   ```bash
+   git clone <this-repo-url> ~/prompt-journal
+   ```
+2. **Open a Claude Code session in that clone** and run the setup command:
+   ```bash
+   cd ~/prompt-journal
+   claude
+   ```
+   ```
+   /configure
+   ```
+   This is the entire setup — see [`/configure`](#configure) below for exactly what it does.
+3. **Restart Claude Code** (new session) so it picks up the change, then send any throwaway
+   prompt in any repo. Confirm a `<branch>.txt` file appeared in the sibling `../prompts/`
+   folder. You're now recording automatically — nothing else to do.
+4. **Whenever you want feedback**, run `/analyse` (see [table below](#command-reference)).
+   It scores everything you've recorded and writes/updates your personal guide.
+
+That's the whole loop: **write prompts normally → `/analyse` → read your guide.** Everything
+past this point is detail you can come back to.
 
 ---
 
@@ -51,20 +77,119 @@ committed:
  /scaffold-asset  ────────►  decide type + placement, then build an asset   (skill: asset-architect)
 ```
 
-Six moving parts, all in this repo:
+The internal pieces that make this run, all in this repo:
 
 | Piece | What it is | Where |
 |---|---|---|
 | **Recorder hook** | Appends each prompt to a per-branch log file in the sibling `../prompts/` | `scripts/record-prompt.ps1` / `.sh` |
 | **`prompt-critic`** skill | Scores a prompt (D1–D10 design + E1–E4 evaluability), localizes gaps, rewrites it | `.claude/skills/prompt-critic/` |
-| **`prompt-example-curator`** skill | Bands prompts bad/good/excellent and writes worked examples (rubric + transformation tables) into the guide | `.claude/skills/prompt-example-curator/` |
+| **`prompt-example-curator`** skill | Bands prompts bad/good/excellent and writes worked examples into the guide | `.claude/skills/prompt-example-curator/` |
 | **`asset-suggester`** skill | Clusters recurring work across the journal into reusable-asset candidates | `.claude/skills/asset-suggester/` |
-| **`asset-architect`** skill + **`/scaffold-asset`** | Decides asset type + placement and scaffolds it (after approval) | `.claude/skills/asset-architect/`, `.claude/commands/scaffold-asset.md` |
-| **`prompt-journal`** skill + **`/analyse`** command | Runs record → score → curate → suggest end to end over a log or the `../prompts/` dir | `.claude/skills/prompt-journal/`, `.claude/commands/analyse.md` |
+| **`asset-architect`** skill | Decides asset type + placement and scaffolds it (after your approval) | `.claude/skills/asset-architect/` |
+| **`artifact-reviewer`** skill | Audits an existing asset against the same quality gate `asset-architect` builds to | `.claude/skills/artifact-reviewer/` |
+| **`prompt-journal`** skill | Runs record → score → curate → suggest end to end | `.claude/skills/prompt-journal/` |
+
+You never need to invoke a skill directly — each has a slash command in front of it. That's
+the table below.
 
 ---
 
-## Part A — One-time setup (each teammate)
+## Command reference
+
+Every command is typed into the **Claude Code chat prompt**, not a shell (`render-guide.py`
+is the one exception — it's a normal Python script). "Input" lists every argument/flag and
+what it means; "Outcome" is exactly what gets written or printed, so you know what to expect
+before you run it.
+
+### `/configure`
+
+**What it does** — one-step install/repair of the recorder hook. Detects your OS, patches
+your Claude Code settings, self-tests the result. Safe to re-run any time.
+
+| | |
+|---|---|
+| **Input** | Nothing required. Optional flags: `--project` (write the hook to *this repo's* `.claude/settings.json` instead of your global `~/.claude/settings.json` — scopes recording to just this repo); `--journal <path>` (`-JournalDir <path>` on Windows) — put logs somewhere other than the default sibling `../prompts` folder. |
+| **Outcome** | A `UserPromptSubmit` hook registered (or repaired) pointing at this clone's `scripts/record-prompt.{sh,ps1}`; missing journal dir created; stale/duplicate hook entries removed; executable bit fixed on macOS/Linux. Prints one line per check: `[OK]` (already correct), `[FIXED]` (it corrected something for you), or `[ACTION]` (you need to do one manual step — it tells you exactly what). Ends with a self-test that confirms a prompt actually gets recorded. |
+| **When to run it** | Once, right after cloning. Again any time prompts stop appearing in `../prompts/`. |
+
+### `/analyse` (alias: `/prompt-review`)
+
+**What it does** — the main pipeline: scores every prompt you've recorded and refreshes your
+guide. Idempotent — re-running never double-counts a prompt.
+
+| | |
+|---|---|
+| **Input** | Optional **selector** (pick at most one) — a file/dir path (e.g. `../prompts/master.txt`), `--project <name>`, or `--branch <name>`. **Omit it entirely to analyse your whole journal** (the default, and the normal way to run it). Optional `--user <name>` — whose store/guide to update; defaults to your OS username. |
+| **Outcome** | For each log processed: a per-file review at `<outcomes>/reviews/<user>/<branch>.md` (that session's strengths/weaknesses + asset opportunities). Across the whole run: new lines appended to the append-only score store `<outcomes>/scores/<user>.jsonl`; your guide regenerated at `<outcomes>/guides/<user>.{json,md,pdf,docx}`; asset candidates refreshed at `<outcomes>/suggestions/<user>.json`. |
+| **When to run it** | Regularly — weekly is a reasonable cadence. Narrow it (`--project`, `--branch`, a file) only when you want to re-check one slice without waiting on the whole journal. |
+
+### `/scaffold-asset`
+
+**What it does** — turns a recurring pattern (surfaced by `/analyse`) into a real, reusable
+Claude Code asset: a skill, subagent, hook, slash command, memory rule, or script.
+
+| | |
+|---|---|
+| **Input** | **Required**: a candidate id from `<outcomes>/suggestions/<user>.json` (e.g. `/scaffold-asset sg-014`), or a plain-English description of the need typed inline. Optional grounding flags: `--repo <path>` (target repo to scaffold into), `--confluence <url\|id>`, `--docs <path>`, `--code <glob>`, `--prompts <log\|user>`, `--user <name>`. |
+| **Outcome** | First prints a **grounding brief** (what it read from the target repo's code/`CLAUDE.md`/rules, plus any Confluence/docs/prompts you pointed it at) and a **draft** of the asset — type, placement, and content. **It writes nothing until you approve the draft.** After approval: the new file is written to its canonical location (e.g. `.claude/skills/<name>/SKILL.md`) with a built-in verification (evals, output contract, or an exit-code test). |
+| **When to run it** | When `/analyse` or `asset-suggester` flags a repeated pattern worth turning into an asset, or any time you want to hand-build one from a described need. |
+
+### `/review-asset`
+
+**What it does** — audits an *existing* skill/agent/hook/command/rule/script against the same
+quality gate `/scaffold-asset` builds to. Read-only: it reports, it never edits.
+
+| | |
+|---|---|
+| **Input** | Optional path to one asset file or a directory tree (default: `./.claude`, i.e. everything in the current repo). Optional `--focus <type\|rubric>` to narrow the audit to one asset type or one of the 7 quality rubrics (correctness/latency/cost/security/observability/scale/reliability). |
+| **Outcome** | A severity-ranked findings report, a score, and a PASS/FAIL verdict, with a concrete suggested fix per finding. No files are modified — route any fix to `/scaffold-asset` or a human editor. |
+| **When to run it** | Before trusting an asset (yours or someone else's) in a real workflow, or periodically to catch drift. |
+
+### `/catalog`
+
+**What it does** — prints the full capability guide for this repo: every command, skill, and
+agent, reconciled against what's actually installed on disk (so it can't drift out of date).
+
+| | |
+|---|---|
+| **Input** | None. |
+| **Outcome** | A printed reference table (usage, input, outcome) for every command/skill/agent — useful as a live index whenever you forget what's available. |
+| **When to run it** | Any time you want "what can this repo do?" answered without leaving Claude Code. |
+
+### `/test`
+
+**What it does** — end-to-end self-test of the whole framework, in complete isolation from
+your real data.
+
+| | |
+|---|---|
+| **Input** | None. |
+| **Outcome** | Runs `scripts/selftest.sh` (deterministic recorder/configure/parser/renderer checks), then drives `prompt-critic`, `/analyse` (all selector forms), `asset-suggester`, `asset-architect` (draft-only), and `/catalog` over fixtures under a throwaway `_selftest` user. Prints a PASS/FAIL checklist, then tears down every test artifact and temp dir it created. **Never touches your real journal, scores, guide, suggestions, or settings.** |
+| **When to run it** | After changing any script, skill, or fixture in this repo, to confirm nothing broke. |
+
+### `scripts/render-guide.py` *(shell command, not a slash command)*
+
+**What it does** — regenerates the human-readable views of your guide from its JSON source.
+`/analyse` already calls this for you; run it by hand only if you edited the JSON directly or
+want to re-render without a full `/analyse` pass.
+
+| | |
+|---|---|
+| **Input** | Required positional arg: path to `<outcomes>/guides/<user>.json`. Optional flag to render just one format: `--md`, `--pdf`, or `--docx` (omit to render all three). Requires `reportlab` + `python-docx` (`pip install reportlab python-docx`). |
+| **Outcome** | Writes `<user>.md`, `<user>.pdf`, and/or `<user>.docx` next to the JSON file in `<outcomes>/guides/`. |
+| **When to run it** | Rarely — only for manual re-renders. |
+
+```bash
+python scripts/render-guide.py ../prompts-review-outcomes/guides/<user>.json          # all three: MD + PDF + DOCX
+python scripts/render-guide.py ../prompts-review-outcomes/guides/<user>.json --pdf     # just one
+```
+
+---
+
+## Setup, in detail
+
+Only read this if `/configure` didn't just work, or you want to know what it's doing under
+the hood.
 
 ### 1. Get the journal repo
 
@@ -79,7 +204,7 @@ git clone <this-repo-url> ~/prompt-journal      # macOS / Linux
 git clone <this-repo-url> "D:\code\prompt-improvement-framework"      # Windows
 ```
 
-### 2. Run `/configure` (one step)
+### 2. Run `/configure`
 
 `/configure` is a **Claude Code slash command, not a shell command** — running it in
 Terminal/PowerShell will just fail as "command not found". From the clone directory, start
@@ -96,22 +221,10 @@ Then, **inside that Claude Code chat prompt**, type:
 /configure
 ```
 
-That is the whole setup. `/configure` detects your OS and runs the matching
-`scripts/configure.*`, which:
-
-- registers a `UserPromptSubmit` hook in your **global** `~/.claude/settings.json` pointing
-  at *this clone's* recorder, so **every prompt in every repo** is captured;
-- lands logs in a **sibling `prompts/` folder beside the clone** (`<clone>/../prompts`) — kept
-  out of the repo so your prompts are never committed. No `PROMPT_JOURNAL_DIR` needed;
-- auto-fixes the common issues (missing journal dir, a stale/duplicate recorder hook, a missing
-  `settings.json`, the `chmod +x` bit on the bash recorder, `pwsh` vs `powershell`);
-- **self-tests** the recorder and prints a summary of `[OK]` / `[FIXED]` / `[ACTION]` lines.
-
+See the [command reference](#configure) above for exactly what it registers and prints.
 It is **idempotent** — safe to re-run any time a prompt stops getting logged. You only need
 to act when it prints an `[ACTION]` line (e.g. "install PowerShell 7", "install `jq` or
-`python3`", "fix invalid JSON") — it tells you the exact step. Options: `--project` scopes the
-hook to just this repo; `--journal <path>` (`-JournalDir <path>` on Windows) keeps the journal
-somewhere other than the default sibling folder.
+`python3`", "fix invalid JSON") — it tells you the exact step.
 
 After it succeeds, **restart Claude Code / start a new session** so it reloads
 `settings.json`.
@@ -147,7 +260,7 @@ self-tests this, so it should just work.) That's it — recording is now automat
 
 ---
 
-## Part B — Daily use
+## Daily use
 
 Just work. Every prompt you submit is appended to a log in the sibling `../prompts/` folder,
 named after the current context, resolved in this order (slashes become hyphens in the filename):
@@ -164,37 +277,10 @@ Slash commands (`/build`, `/init`) are recorded too.
 
 ---
 
-## Part C — Analyze and rate your prompts
+## What the rubric checks
 
-**By default `/analyse` reviews your whole journal** — every log across every project and
-branch. Narrow it only when you want to: pass a file/dir path, `--project <name>`, or
-`--branch <name>`.
-
-```
-/analyse                                   --user waqar.aziz   # everything (default)
-/analyse --project core-service            --user waqar.aziz   # one project
-/analyse --branch feature/PROJ-1234_x      --user waqar.aziz   # one branch
-/analyse ../prompts/master.txt             --user waqar.aziz   # one file
-```
-(`/prompt-review` still works as an alias.) Or just ask Claude in this repo: *"review all my
-prompts and update my guide."* Either way the `prompt-journal` skill:
-
-1. Splits each log into sessions (entries under one branch, in time order = one chain).
-2. Scores each prompt with **`prompt-critic`**, passing earlier turns as `session_context`.
-3. Writes a **per-file review** to `../prompts-review-outcomes/reviews/<user>/<branch>.md` — that
-   related session's strengths, weaknesses, and asset opportunities (worth turning into a skill/agent/hook).
-4. Appends results to `../prompts-review-outcomes/scores/<user>.jsonl` (with the log's `project`/`root`).
-5. Compiles the **overall** guide `../prompts-review-outcomes/guides/<user>.{json,md,pdf,docx}` from
-   the *whole store* with **`prompt-example-curator`** — grounded in your real history.
-6. Clusters recurring work into machine-readable `../prompts-review-outcomes/suggestions/<user>.json`
-   with **`asset-suggester`**.
-
-(All outputs sit under the sibling outcomes dir — `PROMPT_OUTCOMES_DIR`, default `../prompts-review-outcomes`.)
-
-### What the rubric checks
-
-`prompt-critic` scores two layers (full detail in
-`.claude/skills/prompt-critic/references/rubric.md`):
+`prompt-critic` — the skill `/analyse` calls to score each prompt — checks two layers (full
+detail in `.claude/skills/prompt-critic/references/rubric.md`):
 
 - **Layer 1 — Design:** clarity & explicit action verb (D1), specificity & constraints
   (D2), output format (D3), context/motivation (D4), grounding (D5), examples (D6),
@@ -207,20 +293,19 @@ It produces a JSON contract (score 0–100, verdict `STRONG/ADEQUATE/WEAK/POOR/B
 per-dimension finding with evidence, a rewritten prompt, and suggested eval criteria) then
 a short Markdown summary.
 
-### Short prompts and chains are handled fairly
-
-Most real prompts are terse follow-up turns that lean on session context (`"push it"`,
-`"are we good to merge?"`). The critic scores these as **chain steps**: it judges them
-against what the session already resolved and **never penalizes brevity** — a one-word
-`"yes"` can be an excellent turn. It only flags a reference the session genuinely left
-ambiguous, an undefined verb, or an untestable success word. See
+**Short prompts and chains are handled fairly.** Most real prompts are terse follow-up turns
+that lean on session context (`"push it"`, `"are we good to merge?"`). The critic scores these
+as **chain steps**: it judges them against what the session already resolved and **never
+penalizes brevity** — a one-word `"yes"` can be an excellent turn. It only flags a reference
+the session genuinely left ambiguous, an undefined verb, or an untestable success word. See
 `.claude/skills/prompt-critic/references/conversational-chains.md`.
 
 ---
 
-## Part D — Your guide
+## Your guide
 
-`../prompts-review-outcomes/guides/<user>.md` is your living, personalised output. It has:
+`../prompts-review-outcomes/guides/<user>.md` is your living, personalised output, written by
+`/analyse`. It has:
 
 - a **Snapshot** — prompts reviewed, band counts (excellent/good/bad), and trend vs. last
   time;
@@ -234,36 +319,31 @@ guide is regenerated by merging — it keeps what still teaches, adds new exampl
 retires stale ones. Format is fixed in
 `.claude/skills/prompt-example-curator/references/guide-format.md`.
 
-**Human-friendly formats.** The guide has one structured source, `../prompts-review-outcomes/guides/<user>.json`,
-and three rendered views — **Markdown, PDF, and Word** — all produced from it. Each
-reviewed prompt renders a **rubric scorecard** (every D1–D10 / E1–E4 dimension marked
+**Human-friendly formats.** The guide has one structured source, `<outcomes>/guides/<user>.json`,
+and three rendered views — **Markdown, PDF, and Word** — produced by
+[`scripts/render-guide.py`](#scriptsrender-guidepy-shell-command-not-a-slash-command) (above).
+Each reviewed prompt renders a **rubric scorecard** (every D1–D10 / E1–E4 dimension marked
 Met / Partial / Missing / n-a, with evidence) and a **transformation table** (each gap →
-a concrete rewrite + the principle it teaches), so it is explicit on which grounds the
-prompt was reviewed and which best practices it missed. Regenerate the views any time:
-
-```bash
-python scripts/render-guide.py ../prompts-review-outcomes/guides/<user>.json          # all three: MD + PDF + DOCX
-python scripts/render-guide.py ../prompts-review-outcomes/guides/<user>.json --pdf     # just one
-```
-(Uses `reportlab` + `python-docx` — no external tools. `pip install reportlab python-docx`
-if missing.)
+a concrete rewrite + the principle it teaches).
 
 ---
 
-## Part E — Turn recurring work into reusable assets
+## Turning recurring work into reusable assets
 
 Reviewing prompts also surfaces **what you keep doing** — and repeated work is a signal to
-build a reusable Claude Code asset. `/analyse` records those signals; two pieces act on them:
+build a reusable Claude Code asset. `/analyse` records those signals; two commands act on
+them (see the [reference table](#command-reference) for their exact input/outcome):
 
-- **`asset-suggester`** clusters recurring intents/tools/tasks across your whole journal (plus
-  any per-prompt `asset_hint` from `prompt-critic`) into candidates in `suggestions/<user>.json`
+- **`asset-suggester`** (runs automatically inside `/analyse`) clusters recurring
+  intents/tools/tasks across your whole journal into candidates in `suggestions/<user>.json`
   — each typed provisionally as a **skill / subagent / hook / slash command / rule / script**,
   with the evidence (your real repeated prompts), a proposed trigger, and where it should live.
-- **`asset-architect`** (via **`/scaffold-asset <id>`**) makes the authoritative call: it
-  applies a decision matrix (grounded in Anthropic's guidance — see
-  `.claude/skills/asset-architect/references/sources.md`), localizes placement by reading the
-  **target repo's `CLAUDE.md` + `.claude/rules/`**, drafts the asset to Anthropic's authoring
-  standards, and **writes it only after you approve**.
+- **`/scaffold-asset <id>`** makes the authoritative call: applies a decision matrix (grounded
+  in Anthropic's guidance — see `.claude/skills/asset-architect/references/sources.md`),
+  localizes placement by reading the **target repo's `CLAUDE.md` + `.claude/rules/`**, drafts
+  the asset to Anthropic's authoring standards, and **writes it only after you approve**.
+- **`/review-asset`** audits an asset (new or old) against the same quality gate, any time you
+  want a second opinion.
 
 The guiding principle: *repetition tells you to capture a need; the signal tells you the type* —
 a repeated **procedure** → skill, a **fact** → CLAUDE.md/rule, a **"whenever X" guarantee** →
@@ -272,7 +352,7 @@ complements your global `~/.claude/rules/sdlc-asset-authoring.md` and stays repo
 
 ---
 
-## Part F — Rolling it out to the team
+## Rolling it out to the team
 
 - **Everyone records to their own files.** Each person runs `/configure` in their own clone;
   the default sibling `../prompts/` keeps their raw prompts out of the shared repo (point it
@@ -294,18 +374,13 @@ complements your global `~/.claude/rules/sdlc-asset-authoring.md` and stays repo
 
 ## Testing the framework
 
-Run **`/test`** (the test play) to verify everything end to end. It:
+Run **`/test`** (see the [reference table](#test)) to verify everything end to end, in an
+isolated sandbox that never touches your real journal, settings, scores, guide, or
+suggestions. The underlying script harness alone is CI-friendly:
 
-1. runs `bash scripts/selftest.sh` — a deterministic, sandboxed harness that asserts the
-   recorder header + branch/session/repo fallbacks, `configure` idempotency / stale-removal /
-   self-test / `--journal`, the header parser, and the guide renderer;
-2. then drives the LLM-side pieces over `tests/fixtures/` under a throwaway `_selftest` user —
-   `prompt-critic`, `/analyse` (all + `--project` + `--branch` + single file), `asset-suggester`,
-   `asset-architect` (draft-only, approval gate), and `/catalog` — checking each outcome;
-3. tears down every `_selftest` artifact and temp dir.
-
-It never touches your real journal, settings, scores, guide, or suggestions. The script harness
-alone is CI-friendly: `bash scripts/selftest.sh` exits non-zero if any check fails.
+```bash
+bash scripts/selftest.sh   # exits non-zero if any check fails
+```
 
 ## Repo map
 
