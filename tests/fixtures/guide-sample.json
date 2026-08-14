@@ -1,0 +1,23 @@
+{
+  "user": "_selftest",
+  "updated": "2026-08-14",
+  "source": "whole journal (all logs)",
+  "snapshot": {
+    "reviewed": 5,
+    "excellent": 1,
+    "good": 2,
+    "bad": 2,
+    "trend": "flat — sample fixture, not real data",
+    "common_gap": "D1 — vague success criteria ('make it work')",
+    "strongest_habit": "D2 — concrete acceptance criteria when the ask is a real feature",
+    "coverage": {
+      "files": 3,
+      "projects": ["alpha", "beta", "unknown"],
+      "from": "2026-08-09",
+      "to": "2026-08-11"
+    }
+  },
+  "sections": [],
+  "habits_build": ["State a testable success condition before hitting send."],
+  "habits_have": ["You give real acceptance criteria on substantive feature asks."]
+}

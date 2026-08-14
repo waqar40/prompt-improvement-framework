@@ -1,0 +1,12 @@
+===== [2026-08-10 09:00:00] branch=feature/DEMO-1_alpha project=alpha root=/tmp/demo/alpha =====
+Add a `--dry-run` flag to scripts/deploy.sh that prints each command it would run, prefixed with "[dry-run]", and exits 0 without executing anything. Acceptance: `bash scripts/deploy.sh --dry-run` makes no network calls and prints one line per docker/kubectl command.
+
+
+===== [2026-08-10 09:12:00] branch=feature/DEMO-1_alpha project=alpha root=/tmp/demo/alpha =====
+make it work
+
+
+===== [2026-08-10 09:20:00] branch=feature/DEMO-1_alpha project=alpha root=/tmp/demo/alpha =====
+now push it
+
+
