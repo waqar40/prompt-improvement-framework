@@ -529,15 +529,43 @@ def main() -> int:
         print(w)
 
     both = not (args.pdf or args.docx or args.md)
-    done = []
+    reqs = Path(__file__).parent / "requirements.txt"
+    done: list[str] = []
+    failed: list[str] = []
+
+    def _run(fmt: str, fn) -> None:
+        out = src.with_suffix(f".{fmt}")
+        try:
+            fn(g, out)
+        except ImportError as exc:
+            failed.append(
+                f"{fmt.upper()} skipped — missing dependency ({exc}). "
+                f"Install the pinned versions with: python3 -m pip install -r {reqs}"
+            )
+        except Exception as exc:  # noqa: BLE001 - want one friendly line, not a raw traceback
+            hint = (
+                " This looks like a reportlab/Python version mismatch (reportlab 4.2+ needs "
+                "Python 3.9+) — pin the version this repo ships: "
+                f"python3 -m pip install -r {reqs}"
+                if "usedforsecurity" in str(exc)
+                else f" Re-run with the pinned deps: python3 -m pip install -r {reqs}"
+            )
+            failed.append(f"{fmt.upper()} failed — {exc}.{hint}")
+        else:
+            done.append(str(out))
+
     if args.pdf or both:
-        out = src.with_suffix(".pdf"); render_pdf(g, out); done.append(str(out))
+        _run("pdf", render_pdf)
     if args.docx or both:
-        out = src.with_suffix(".docx"); render_docx(g, out); done.append(str(out))
+        _run("docx", render_docx)
     if args.md or both:
-        out = src.with_suffix(".md"); render_md(g, out); done.append(str(out))
-    print("Wrote:\n  " + "\n  ".join(done))
-    return 0
+        _run("md", render_md)
+
+    if done:
+        print("Wrote:\n  " + "\n  ".join(done))
+    for msg in failed:
+        print(f"WARNING: {msg}")
+    return 1 if failed and not done else 0
 
 
 if __name__ == "__main__":

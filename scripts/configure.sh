@@ -15,10 +15,11 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 RECORD_SCRIPT="$SCRIPT_DIR/record-prompt.sh"
 DEFAULT_JOURNAL="$(dirname "$REPO_ROOT")/prompts"   # sibling 'prompts' beside the clone
 
-OK=(); FIXED=(); ACTIONS=()
-note_ok()     { OK+=("$1"); }
-note_fixed()  { FIXED+=("$1"); }
-note_action() { ACTIONS+=("$1"); }
+OK=(); FIXED=(); ACTIONS=(); OPTIONAL=()
+note_ok()       { OK+=("$1"); }
+note_fixed()    { FIXED+=("$1"); }
+note_action()   { ACTIONS+=("$1"); }
+note_optional() { OPTIONAL+=("$1"); }
 
 # --- Arg parsing ------------------------------------------------------------------------------
 PROJECT=0; SETTINGS_PATH=""; JOURNAL_DIR=""; EXPLICIT_JOURNAL=0
@@ -169,12 +170,31 @@ if [ "$MERGE_RC" -eq 0 ] && { command -v jq >/dev/null 2>&1 || command -v python
   rm -rf "$TMP"
 fi
 
+# --- Optional: guide-rendering deps (PDF/Word views of the per-user guide) --------------------
+# Not required for recording or scoring prompts — only /analyse's PDF/Word render step needs
+# these. Best-effort: install the pinned versions (scripts/requirements.txt) so plain `python3`
+# renders correctly (reportlab must stay <4.2 to work on Python 3.8's hashlib); never block
+# configuration on this, and never fail the run because of it.
+REQS="$SCRIPT_DIR/requirements.txt"
+if command -v python3 >/dev/null 2>&1; then
+  if python3 -c "import reportlab, docx" >/dev/null 2>&1; then
+    note_ok "Guide PDF/Word deps present (reportlab, python-docx)"
+  elif python3 -m pip install --quiet -r "$REQS" >/dev/null 2>&1 && python3 -c "import reportlab, docx" >/dev/null 2>&1; then
+    note_fixed "Installed pinned guide-rendering deps (pip install -r $REQS)"
+  else
+    note_optional "PDF/Word guide views need: python3 -m pip install -r $REQS (Markdown view always works without them)"
+  fi
+else
+  note_optional "python3 not found — skipping guide PDF/Word deps (Markdown view still works without them)"
+fi
+
 # --- Report -----------------------------------------------------------------------------------
 echo ""
 echo "prompt-journal recorder — configuration summary"
-for m in "${OK[@]:-}";      do [ -n "$m" ] && echo "[OK]     $m"; done
-for m in "${FIXED[@]:-}";   do [ -n "$m" ] && echo "[FIXED]  $m"; done
-for m in "${ACTIONS[@]:-}"; do [ -n "$m" ] && echo "[ACTION] $m"; done
+for m in "${OK[@]:-}";       do [ -n "$m" ] && echo "[OK]       $m"; done
+for m in "${FIXED[@]:-}";    do [ -n "$m" ] && echo "[FIXED]    $m"; done
+for m in "${OPTIONAL[@]:-}"; do [ -n "$m" ] && echo "[OPTIONAL] $m"; done
+for m in "${ACTIONS[@]:-}";  do [ -n "$m" ] && echo "[ACTION]   $m"; done
 echo ""
 if [ "${#ACTIONS[@]}" -eq 0 ] && [ "$SELFTEST_OK" -eq 1 ]; then
   echo "Done. Restart Claude Code (or start a new session) so it reloads settings."

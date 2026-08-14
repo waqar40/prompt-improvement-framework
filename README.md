@@ -12,7 +12,8 @@ lazy ones to kill.
 > **Every `/command` in this README (`/configure`, `/analyse`, `/scaffold-asset`, …) is a
 > Claude Code slash command.** Type it into the Claude Code chat prompt itself — **not**
 > your OS terminal (bash/zsh/PowerShell). You need the [Claude Code CLI](https://docs.claude.com/en/docs/claude-code)
-> installed. Only `scripts/render-guide.py` (Part D) is a real shell command.
+> installed. Only `scripts/render-guide.py` (Part D) is a real shell command — and even its
+> Python dependencies are installed for you by `/configure`, not by hand.
 
 ---
 
@@ -30,7 +31,8 @@ lazy ones to kill.
    ```
    /configure
    ```
-   This is the entire setup — see [`/configure`](#configure) below for exactly what it does.
+   This is the entire setup — no manual `pip install` or dependency hunting; see
+   [`/configure`](#configure) below for exactly what it does.
 3. **Restart Claude Code** (new session) so it picks up the change, then send any throwaway
    prompt in any repo. Confirm a `<branch>.txt` file appeared in the sibling `../prompts/`
    folder. You're now recording automatically — nothing else to do.
@@ -103,14 +105,16 @@ before you run it.
 
 ### `/configure`
 
-**What it does** — one-step install/repair of the recorder hook. Detects your OS, patches
-your Claude Code settings, self-tests the result. Safe to re-run any time.
+**What it does** — one-step install/repair of the recorder hook, and of the guide's PDF/Word
+rendering deps. Detects your OS, patches your Claude Code settings, self-tests the result.
+Safe to re-run any time. This is the **only setup step** — nothing in this repo needs a
+separate `pip install` or `npm install` by hand; `/configure` covers it.
 
 | | |
 |---|---|
 | **Input** | Nothing required. Optional flags: `--project` (write the hook to *this repo's* `.claude/settings.json` instead of your global `~/.claude/settings.json` — scopes recording to just this repo); `--journal <path>` (`-JournalDir <path>` on Windows) — put logs somewhere other than the default sibling `../prompts` folder. |
-| **Outcome** | A `UserPromptSubmit` hook registered (or repaired) pointing at this clone's `scripts/record-prompt.{sh,ps1}`; missing journal dir created; stale/duplicate hook entries removed; executable bit fixed on macOS/Linux. Prints one line per check: `[OK]` (already correct), `[FIXED]` (it corrected something for you), or `[ACTION]` (you need to do one manual step — it tells you exactly what). Ends with a self-test that confirms a prompt actually gets recorded. |
-| **When to run it** | Once, right after cloning. Again any time prompts stop appearing in `../prompts/`. |
+| **Outcome** | A `UserPromptSubmit` hook registered (or repaired) pointing at this clone's `scripts/record-prompt.{sh,ps1}`; missing journal dir created; stale/duplicate hook entries removed; executable bit fixed on macOS/Linux; the pinned PDF/Word guide-rendering deps (`scripts/requirements.txt`) installed if a Python is found and they're missing. Prints one line per check: `[OK]` (already correct), `[FIXED]` (it corrected something for you), `[OPTIONAL]` (only the PDF/Word deps couldn't be auto-installed — the rest of the pipeline, including the Markdown guide, is unaffected), or `[ACTION]` (you need to do one manual step — it tells you exactly what). Ends with a self-test that confirms a prompt actually gets recorded. |
+| **When to run it** | Once, right after cloning. Again any time prompts stop appearing in `../prompts/`, or `/analyse` reports it couldn't render PDF/Word. |
 
 ### `/analyse` (alias: `/prompt-review`)
 
@@ -175,8 +179,8 @@ want to re-render without a full `/analyse` pass.
 
 | | |
 |---|---|
-| **Input** | Required positional arg: path to `<outcomes>/guides/<user>.json`. Optional flag to render just one format: `--md`, `--pdf`, or `--docx` (omit to render all three). Requires `reportlab` + `python-docx` (`pip install reportlab python-docx`). |
-| **Outcome** | Writes `<user>.md`, `<user>.pdf`, and/or `<user>.docx` next to the JSON file in `<outcomes>/guides/`. |
+| **Input** | Required positional arg: path to `<outcomes>/guides/<user>.json`. Optional flag to render just one format: `--md`, `--pdf`, or `--docx` (omit to render all three). PDF/Word need `reportlab` + `python-docx`, pinned in `scripts/requirements.txt` (`reportlab==4.1.0`, `python-docx==1.1.2`) — **`/configure` already installs these for you**; only run `pip install -r scripts/requirements.txt` yourself if you skipped `/configure` or it reported `[OPTIONAL]`. The Markdown view needs neither package. (reportlab is pinned below 4.2 because 4.2+ calls `hashlib.md5(usedforsecurity=...)`, a keyword only supported on Python 3.9+ — it breaks under Python 3.8.) |
+| **Outcome** | Writes `<user>.md`, `<user>.pdf`, and/or `<user>.docx` next to the JSON file in `<outcomes>/guides/`. If a dependency is missing for a requested format, that format is skipped with a one-line `WARNING` (naming the fix) instead of a crash — the other formats still write. |
 | **When to run it** | Rarely — only for manual re-renders. |
 
 ```bash

@@ -1,0 +1,10 @@
+# ai-gen — pinned deps for scripts/render-guide.py (PDF + Word views of the per-user guide).
+# The Markdown view needs neither package; only --pdf/--docx (and the default "render all
+# three") use these. /configure best-effort installs this file automatically.
+#
+# reportlab MUST stay below 4.2: 4.2+ calls hashlib.md5(usedforsecurity=...), a keyword only
+# supported on Python 3.9+, and raises TypeError under Python 3.8's hashlib. 4.1.0 is verified
+# working on 3.8 through 3.12. Exact-pinned per this repo's dependency policy — bump deliberately
+# and re-verify on the oldest supported Python before raising the ceiling.
+reportlab==4.1.0
+python-docx==1.1.2
