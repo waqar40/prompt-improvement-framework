@@ -368,6 +368,91 @@ penalizes a well-specified prompt just because the agent decided no change was n
 
 ---
 
+## See it in action: one bad prompt, one good prompt
+
+Two real prompts from this repo's own test fixtures (`tests/fixtures/logs/feature-DEMO-2_beta.txt`
+and `feature-DEMO-1_alpha.txt`), scored by `prompt-critic` exactly as `/analyse` would score
+yours. This is the **complete** rubric table, not a summary — every dimension is graded and shown,
+including the ones marked `n/a`, because that's what you'll see for every prompt in your own guide.
+
+### Example 1 — a vague prompt (band: `bad` · score 56/100 · verdict `WEAK`)
+
+> **Prompt as sent:** `version-control it to the shared repo`
+> *(a follow-up turn — the previous turn in that session was `commit this`)*
+
+| # | Dimension | Verdict | Severity | Evidence |
+|---|---|---|---|---|
+| D1 | Clarity & explicitness | Partial | Major | "version-control" names a *category* of git operations, not one of them |
+| D2 | Specificity & constraints | Partial | Major | "to the shared repo" names a target, but not which remote or branch |
+| D3 | Output format & length | n/a | — | no meaningful output format beyond the git operation itself |
+| D4 | Context & motivation | n/a | — | motivation wouldn't change which git command applies |
+| D5 | Grounding / reference | n/a | — | no factual grounding needed |
+| D6 | Examples (show-not-tell) | n/a | — | no example needed for a one-line directive |
+| D7 | Positive framing | Met | — | phrased as what to do, not what to avoid |
+| D8 | Uncertainty handling | n/a | — | not a factual-risk task |
+| D9 | Decomposition fit | Met | — | a single step, not artificially split |
+| D10 | Structural economy | Met | — | brief, not over-engineered |
+| E1 | Success is defined | Gap | Major | no notion of "done" — a commit-only, a push, and an opened PR are all consistent with the wording |
+| E2 | Criteria are measurable | Partial | Major | can't binary-check "version-controlled" without knowing which git action was meant |
+| E3 | Multidimensional coverage | n/a | — | a single quality axis is at stake here |
+| E4 | Failure modes anticipated | n/a | — | no new failure mode beyond the verb ambiguity already scored |
+
+**Rewrite `/analyse` would suggest:**
+`commit the deploy.sh change with a message describing the --dry-run flag, then push it to origin/main`
+
+**The lesson:** name the actual git command (commit / push / open a PR) — a category word like
+"version-control" forces the model to guess which one you meant.
+
+### Example 2 — a strong prompt (band: `excellent` · score 100/100 · verdict `STRONG`)
+
+> **Prompt as sent:** `Add a --dry-run flag to scripts/deploy.sh that prints each command it
+> would run, prefixed with "[dry-run]", and exits 0 without executing anything. Acceptance:
+> bash scripts/deploy.sh --dry-run makes no network calls and prints one line per docker/kubectl
+> command.`
+
+| # | Dimension | Verdict | Severity | Evidence |
+|---|---|---|---|---|
+| D1 | Clarity & explicitness | Met | — | one unambiguous instruction, led by the action verb "Add" |
+| D2 | Specificity & constraints | Met | — | scope is `scripts/deploy.sh`; the boundary ("without executing anything") is explicit |
+| D3 | Output format & length | Met | — | "prints one line per docker/kubectl command" pins the output shape |
+| D4 | Context & motivation | n/a | — | the *why* wouldn't change the implementation of an already well-specified flag |
+| D5 | Grounding / reference | n/a | — | the agent can read `deploy.sh` directly; no external source of truth needed |
+| D6 | Examples (show-not-tell) | n/a | — | the format is fully described without needing an example |
+| D7 | Positive framing | Met | — | every instruction says what TO do (print, prefix, exit 0) |
+| D8 | Uncertainty handling | n/a | — | a verifiable coding task, no hallucination risk |
+| D9 | Decomposition fit | Met | — | simple enough for one prompt, not artificially split |
+| D10 | Structural economy | Met | — | no over-engineering, no dead instructions |
+| E1 | Success is defined | Met | — | the acceptance line defines what correct output is |
+| E2 | Criteria are measurable | Met | — | "makes no network calls and prints one line per ... command" is a binary check |
+| E3 | Multidimensional coverage | Met | — | both correctness (no execution) and format (prefix, one line each) are covered |
+| E4 | Failure modes anticipated | Met | — | "exits 0 without executing anything" directly guards the main failure mode |
+
+**The lesson:** no rewrite needed — imitate this. A single unambiguous instruction, an exact
+output format, and a testable acceptance condition up front leave nothing for the model to guess at.
+
+### What `/analyse` actually writes for these two prompts
+
+Running `/analyse` over a log containing them writes to three places under
+`<outcomes>` (default `~/.claude/prompt-journal/prompts-review-outcomes`):
+
+1. **One append-only line each in `<outcomes>/scores/<user>.jsonl`:**
+   ```json
+   {"date":"2026-08-11","project":"beta","branch":"feature/DEMO-2_beta","prompt_excerpt":"version-control it to the shared repo","prompt_kind":"chain_step","score":56,"verdict":"WEAK","band":"bad","top_dimensions":["D1","E1"]}
+   {"date":"2026-08-10","project":"alpha","branch":"feature/DEMO-1_alpha","prompt_excerpt":"Add a --dry-run flag to scripts/deploy.sh...","prompt_kind":"one_shot","score":100,"verdict":"STRONG","band":"excellent","top_dimensions":[]}
+   ```
+2. **A per-file review** at `<outcomes>/reviews/<user>/<branch-slug>.md` — each prompt's session
+   rolled into Strengths / Weaknesses / Asset opportunities (see [Turning recurring work into
+   reusable assets](#turning-recurring-work-into-reusable-assets)).
+3. **The compiled guide** at `<outcomes>/guides/<user>.md` — Example 1 lands in **"Anti-patterns
+   to kill"** with the full table above plus the before→after rewrite; Example 2 lands in
+   **"What excellent looks like"** with the full table and no rewrite ("imitate this"). See
+   [Your guide](#your-guide) below for the complete rendered format.
+
+That's the whole loop, end to end: what you type → a graded table like the ones above → a banded
+example in your guide → a habit you can apply before your next prompt.
+
+---
+
 ## Your guide
 
 `~/.claude/prompt-journal/prompts-review-outcomes/guides/<user>.md` is your living,
