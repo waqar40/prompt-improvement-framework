@@ -1,0 +1,17 @@
+{
+  "name": "prompt-journal",
+  "version": "1.0.0",
+  "description": "Records every prompt you send to Claude Code, scores it against a rubric distilled from Anthropic's and OpenAI's guidance, and builds a personal prompting guide with real before/after examples.",
+  "author": {
+    "name": "waqar.aziz",
+    "email": "waqar40@gmail.com"
+  },
+  "homepage": "https://github.com/waqar40/prompt-improvement-framework",
+  "license": "MIT",
+  "keywords": [
+    "prompt-engineering",
+    "productivity",
+    "self-review",
+    "coaching"
+  ]
+}

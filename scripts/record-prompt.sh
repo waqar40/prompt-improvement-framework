@@ -25,12 +25,14 @@ esac
 
 cwd="$(read_field cwd)"
 [ -z "$cwd" ] && cwd="$PWD"
+session_id="$(read_field session_id)"
 
-# Journal dir precedence: $1 arg > PROMPT_JOURNAL_DIR > default sibling 'prompts/' next to the
-# clone (i.e. <clone>/../prompts), which keeps raw prompt data out of the repo.
+# Journal dir precedence: $1 arg > PROMPT_JOURNAL_DIR > default ~/.claude/prompt-journal/prompts.
+# The default lives in the user's home, not beside this script, because as an installed plugin
+# this script runs from Claude Code's managed plugin cache — a location that can be rewritten or
+# relocated on update/reinstall and is not meant to hold personal data.
 # ($1 is set by /configure --journal; the hook payload always arrives on stdin, never as an arg.)
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-journal="${1:-${PROMPT_JOURNAL_DIR:-$script_dir/../../prompts}}"
+journal="${1:-${PROMPT_JOURNAL_DIR:-$HOME/.claude/prompt-journal/prompts}}"
 
 # Identifier resolution (what the log file and the entry header are keyed on):
 #   1. current git branch                      -> "<branch>"
@@ -60,6 +62,15 @@ project="$(basename "$project_root" | sed 's/[^A-Za-z0-9._-]/-/g')"
 
 mkdir -p "$journal"
 ts="$(date '+%Y-%m-%d %H:%M:%S')"
+entry_file="$journal/$slug.txt"
 # 'root=' is LAST so a path containing spaces is captured cleanly by the parser (branch/project are space-free).
-printf '===== [%s] branch=%s project=%s root=%s =====\n%s\n\n\n' "$ts" "$identifier" "$project" "$project_root" "$prompt" >> "$journal/$slug.txt"
+printf '===== [%s] branch=%s project=%s root=%s =====\n%s\n\n\n' "$ts" "$identifier" "$project" "$project_root" "$prompt" >> "$entry_file"
+
+# Drop a marker naming the file we just wrote to, keyed by session_id, so record-turn-end.sh
+# (the Stop hook) knows where to attach this turn's "assets-used" block once the turn finishes.
+# Best-effort only — a missing/unwritable marker just means that block gets silently skipped.
+if [ -n "$session_id" ]; then
+  BUFFER_DIR="${TMPDIR:-/tmp}/prompt-journal-turn"
+  mkdir -p "$BUFFER_DIR" 2>/dev/null && printf '%s' "$entry_file" > "$BUFFER_DIR/$session_id.journal" 2>/dev/null || true
+fi
 exit 0

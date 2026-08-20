@@ -1,0 +1,13 @@
+{
+  "name": "prompt-journal-marketplace",
+  "owner": {
+    "name": "waqar40"
+  },
+  "plugins": [
+    {
+      "name": "prompt-journal",
+      "source": "./",
+      "description": "Records every prompt you send to Claude Code, scores it against a rubric, and builds a personal prompting guide with before/after examples."
+    }
+  ]
+}

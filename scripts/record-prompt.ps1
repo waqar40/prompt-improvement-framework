@@ -14,11 +14,14 @@ if ([string]::IsNullOrWhiteSpace($promptText)) { exit 0 }
 if ($promptText.TrimStart() -match '^<task-notification\b') { exit 0 }
 
 $cwd = if ($data.cwd) { [string]$data.cwd } else { (Get-Location).Path }
-# Journal dir precedence: -JournalDir arg > $env:PROMPT_JOURNAL_DIR > default sibling 'prompts/'
-# next to the clone (i.e. <clone>\..\prompts), which keeps raw prompt data out of the repo.
+# Journal dir precedence: -JournalDir arg > $env:PROMPT_JOURNAL_DIR > default
+# ~/.claude/prompt-journal/prompts. The default lives in the user's home, not beside this
+# script, because as an installed plugin this script runs from Claude Code's managed plugin
+# cache — a location that can be rewritten or relocated on update/reinstall and is not meant
+# to hold personal data.
 $journal = if ($JournalDir) { $JournalDir }
            elseif ($env:PROMPT_JOURNAL_DIR) { $env:PROMPT_JOURNAL_DIR }
-           else { Join-Path $PSScriptRoot '..\..\prompts' }
+           else { Join-Path $HOME '.claude\prompt-journal\prompts' }
 
 # Identifier resolution (what the log file and the entry header are keyed on):
 #   1. current git branch                      -> "<branch>"
@@ -54,7 +57,20 @@ $project = (Split-Path $projectRoot -Leaf) -replace '[^A-Za-z0-9._-]', '-'
 if (-not (Test-Path $journal)) { New-Item -ItemType Directory -Force -Path $journal | Out-Null }
 
 $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+$entryFile = Join-Path $journal "$slug.txt"
 # 'root=' is LAST so a path containing spaces is captured cleanly by the parser (branch/project are space-free).
 $entry = "===== [$ts] branch=$identifier project=$project root=$projectRoot =====`n$promptText`n`n`n"
-Add-Content -Path (Join-Path $journal "$slug.txt") -Value $entry -NoNewline -Encoding utf8
+Add-Content -Path $entryFile -Value $entry -NoNewline -Encoding utf8
+
+# Drop a marker naming the file we just wrote to, keyed by session_id, so record-turn-end.ps1
+# (the Stop hook) knows where to attach this turn's "assets-used" block once the turn finishes.
+# Best-effort only — a missing/unwritable marker just means that block gets silently skipped.
+$sessionId = [string]$data.session_id
+if (-not [string]::IsNullOrWhiteSpace($sessionId)) {
+    try {
+        $bufferDir = Join-Path ([System.IO.Path]::GetTempPath()) 'prompt-journal-turn'
+        New-Item -ItemType Directory -Force -Path $bufferDir | Out-Null
+        Set-Content -Path (Join-Path $bufferDir "$sessionId.journal") -Value $entryFile -NoNewline -Encoding utf8
+    } catch { }   # never let marker bookkeeping fail the recorder itself
+}
 exit 0

@@ -6,7 +6,17 @@ Add a `--dry-run` flag to scripts/deploy.sh that prints each command it would ru
 make it work
 
 
+----- assets-used -----
+tool: Read -> /tmp/demo/alpha/scripts/deploy.sh
+----- end-assets-used -----
+
+
 ===== [2026-08-10 09:20:00] branch=feature/DEMO-1_alpha project=alpha root=/tmp/demo/alpha =====
 now push it
+
+
+----- assets-used -----
+skill: commit-message -> skills/commit-message/SKILL.md
+----- end-assets-used -----
 
 

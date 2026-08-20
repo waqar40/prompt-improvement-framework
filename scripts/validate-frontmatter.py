@@ -2,9 +2,10 @@
 """Usage: python scripts/validate-frontmatter.py [PATH ...]
 
 Checks the frontmatter slice of the quality gate (references/quality-gate.md, section A) for
-skills (SKILL.md), slash commands (.claude/commands/*.md), and subagents (.claude/agents/*.md).
-Deterministic and cross-platform (pure stdlib). Default PATH = ./.claude . Exit non-zero if any
-ERROR is found (WARN does not fail). Wireable as a PostToolUse hook or a CI gate.
+skills (SKILL.md), slash commands (commands/*.md or .claude/commands/*.md), and subagents
+(agents/*.md or .claude/agents/*.md) — both plugin-root and project-local (.claude/) layouts.
+Deterministic and cross-platform (pure stdlib). Default PATH = . (repo root). Exit non-zero if
+any ERROR is found (WARN does not fail). Wireable as a PostToolUse hook or a CI gate.
 """
 import re, sys, pathlib
 
@@ -98,7 +99,7 @@ def iter_targets(root):
         yield from root.glob(pat)
 
 def main():
-    args = sys.argv[1:] or [".claude"]
+    args = sys.argv[1:] or ["."]
     seen = set()
     print("frontmatter validation:")
     n = 0
