@@ -12,43 +12,60 @@ lazy ones to kill.
 > **Every `/command` in this README (`/configure`, `/analyse`, `/scaffold-asset`, …) is a
 > Claude Code slash command.** Type it into the Claude Code chat prompt itself — **not**
 > your OS terminal (bash/zsh/PowerShell). You need the [Claude Code CLI](https://docs.claude.com/en/docs/claude-code)
-> installed. Only `scripts/render-guide.py` (Part D) is a real shell command — and even its
-> Python dependencies are installed for you by `/configure`, not by hand.
+> installed. Only `scripts/render-guide.py` is a real shell command — and even its Python
+> dependencies are installed for you by `/configure`, not by hand.
+
+**Contents:** [What you get, and what it costs](#what-you-get-and-what-it-costs) ·
+[How it works](#how-it-works) · [Quick start](#quick-start-3-steps) ·
+[Try it dry-run](#try-it-dry-run--see-it-work-before-you-trust-it) · [Daily use](#daily-use) ·
+[The rubric, explained](#the-rubric-explained) · [Your guide](#your-guide) ·
+[Turning recurring work into assets](#turning-recurring-work-into-reusable-assets) ·
+[Getting the most out of it](#getting-the-most-out-of-it) ·
+[Command reference](#command-reference) · [Setup, in detail](#setup-in-detail) ·
+[Repo map](#repo-map) · [Troubleshooting](#troubleshooting)
 
 ---
 
-## Quick start (3 steps)
+## What you get, and what it costs
 
-1. **Add the marketplace and install the plugin** — inside any Claude Code session:
-   ```
-   /plugin marketplace add waqar40/prompt-improvement-framework
-   /plugin install prompt-journal
-   ```
-   That's the entire setup. The `UserPromptSubmit` recorder hook wires itself automatically
-   (`hooks/hooks.json`) — no settings.json editing, no `pip install`, no dependency hunting.
-2. **Send any throwaway prompt** in any repo. Confirm a `<branch>.txt` file appeared under
-   `~/.claude/prompt-journal/prompts/`. You're now recording automatically — nothing else to do.
-   If nothing appears, run `/configure` — it self-tests the recorder and reports exactly what's wrong.
-3. **Whenever you want feedback**, run `/analyse` (see [table below](#command-reference)).
-   It scores everything you've recorded and writes/updates your personal guide.
+Set expectations before you install anything — this is a coaching tool, not magic.
 
-That's the whole loop: **write prompts normally → `/analyse` → read your guide.** Everything
-past this point is detail you can come back to.
+**What you get:**
+- A **plain-text, append-only log** of every prompt you send, per branch/project, recorded
+  automatically — you never type anything to make this happen.
+- A **graded rubric report** for every prompt (14 dimensions, `Met`/`Partial`/`Gap`/`n/a`,
+  with evidence) whenever you run `/analyse`.
+- A **personal guide** — your strongest prompts, your near-misses, your anti-patterns with
+  before→after rewrites, and durable habits to build — that gets *better*, not bigger, over
+  time (it merges, retiring stale examples for sharper ones).
+- A **backlog of reusable-asset ideas** (skills, hooks, commands) mined from what you actually
+  keep asking for, with a builder (`/scaffold-asset`) and an auditor (`/review-asset` +
+  `/fix-asset`) for them.
 
-<details>
-<summary>Developing on this repo directly (not installing it as a plugin)</summary>
+**What it needs from you:**
+- **Nothing at first.** Install once, work normally. Recording is fully automatic.
+- **Running `/analyse` on a cadence** (weekly is reasonable) — the guide only reflects what
+  you've analysed, and it only gets useful once you have real history to look at.
+- **Actually reading the guide** and trying the "habits to build" — the tool surfaces the
+  pattern, it doesn't change your typing for you.
+- A few hundred logged prompts before the guide's snapshot/trend numbers say much. A handful
+  of prompts is not enough signal — don't judge it (or yourself) off day one.
 
-Clone it and add the clone itself as a marketplace source instead of the GitHub shorthand:
-```bash
-git clone https://github.com/waqar40/prompt-improvement-framework ~/prompt-journal
-```
-```
-/plugin marketplace add ~/prompt-journal
-/plugin install prompt-journal
-```
-See [Setup, in detail](#setup-in-detail) for the standalone `--legacy-hook` fallback if your
-Claude Code version predates the plugin system.
-</details>
+**What it deliberately does NOT do:**
+- It does **not** intercept, block, or rewrite your prompt before Claude sees it — it's a
+  recorder + a retrospective coach, not an inline linter. (The rewrite it suggests shows up
+  later, in your guide, for your *next* similar prompt.)
+- It does **not** grade code, PRs, or Claude's answers — only the prompts *you* wrote.
+- It does **not** share your logs with anyone. Everything is local, per-user, under your own
+  `~/.claude/prompt-journal/` — see [Rolling it out to the team](#getting-the-most-out-of-it)
+  for how teams compare guides without a shared log.
+- Scores are an **LLM's rubric judgment**, not ground truth — treat them the way you'd treat a
+  thoughtful reviewer's opinion, and calibrate before you'd ever gate anything on the number
+  (see [Getting the most out of it](#getting-the-most-out-of-it)).
+
+> **Do not paste secrets into prompts.** Prompts are stored verbatim in plain-text logs.
+> Treat the journal like any other source-controlled text: no credentials, tokens, or
+> customer data. This is a security requirement, not a suggestion.
 
 ---
 
@@ -102,22 +119,328 @@ real execution context, not just the words you typed:
 (`<journal>` default `~/.claude/prompt-journal/prompts`; `<outcomes>` default
 `~/.claude/prompt-journal/prompts-review-outcomes`.)
 
-The internal pieces that make this run, all in this plugin:
+Everything in that diagram is a piece of this plugin — see [Repo map](#repo-map) for exactly
+which file does which step. You never invoke a skill directly; every step has a `/command` in
+front of it (below).
 
-| Piece | What it is | Where |
-|---|---|---|
-| **Recorder hook** | Appends each prompt to a per-branch log file in the journal dir | `scripts/record-prompt.ps1` / `.sh`, wired by `hooks/hooks.json` |
-| **Asset-use recorder hooks** | Buffer + flush which skills/subagents/tools ran as a result of that prompt (name + resolved path), appended as an `assets-used` block on the same entry | `scripts/record-tool-use.{ps1,sh}` (`PostToolUse`) + `scripts/record-turn-end.{ps1,sh}` (`Stop`), both wired by `hooks/hooks.json` |
-| **`prompt-critic`** skill | Scores a prompt (D1–D10 design + E1–E4 evaluability), localizes gaps, rewrites it | `skills/prompt-critic/` |
-| **`prompt-example-curator`** skill | Bands prompts bad/good/excellent and writes worked examples into the guide | `skills/prompt-example-curator/` |
-| **`asset-suggester`** skill | Clusters recurring work across the journal into reusable-asset candidates | `skills/asset-suggester/` |
-| **`asset-architect`** skill | Decides asset type + placement and scaffolds it (after your approval) | `skills/asset-architect/` |
-| **`artifact-reviewer`** skill | Audits an existing asset against the same quality gate `asset-architect` builds to, incl. instructional semantics (contradiction/ambiguity/persona/cognitive-load/coverage/composition-conflict); read-only | `skills/artifact-reviewer/` |
-| **`asset-fixer`** skill | Applies only the review findings that are fully specified (mechanical) — never authors new content | `skills/asset-fixer/` |
-| **`prompt-journal`** skill | Runs record → score → curate → suggest end to end | `skills/prompt-journal/` |
+---
 
-You never need to invoke a skill directly — each has a slash command in front of it. That's
-the table below.
+## Quick start (3 steps)
+
+1. **Add the marketplace and install the plugin** — inside any Claude Code session:
+   ```
+   /plugin marketplace add waqar40/prompt-improvement-framework
+   /plugin install prompt-journal
+   ```
+   That's the entire setup. The `UserPromptSubmit` recorder hook wires itself automatically
+   (`hooks/hooks.json`) — no settings.json editing, no `pip install`, no dependency hunting.
+2. **Send any throwaway prompt** in any repo. Confirm a `<branch>.txt` file appeared under
+   `~/.claude/prompt-journal/prompts/`. You're now recording automatically — nothing else to do.
+   If nothing appears, run `/configure` — it self-tests the recorder and reports exactly what's wrong.
+3. **Whenever you want feedback**, run `/analyse` (see [table below](#command-reference)).
+   It scores everything you've recorded and writes/updates your personal guide.
+
+That's the whole loop: **write prompts normally → `/analyse` → read your guide.** Not sure it's
+worth installing yet? Read the next section first — it shows you the exact output, and a
+completely safe way to run the whole thing, before you commit to anything.
+
+<details>
+<summary>Developing on this repo directly (not installing it as a plugin)</summary>
+
+Clone it and add the clone itself as a marketplace source instead of the GitHub shorthand:
+```bash
+git clone https://github.com/waqar40/prompt-improvement-framework ~/prompt-journal
+```
+```
+/plugin marketplace add ~/prompt-journal
+/plugin install prompt-journal
+```
+See [Setup, in detail](#setup-in-detail) for the standalone `--legacy-hook` fallback if your
+Claude Code version predates the plugin system.
+</details>
+
+---
+
+## Try it dry-run — see it work before you trust it
+
+Two ways to evaluate this honestly, in order of how much you're willing to do: **(A)** just
+read — no install, no risk, two minutes; **(B)** install, then run one command that touches
+**zero** real data. Do (A) first if you're still deciding; do (B) right after installing,
+before you ever run `/analyse` for real.
+
+### A. Read-only: a real bad prompt and a real good prompt, fully graded
+
+No installation needed for this part — it's the actual output of `prompt-critic` on two real
+prompts from this repo's own test fixtures (`tests/fixtures/logs/`), reproduced exactly. This
+is the **complete** rubric table, not a summary — every dimension is graded and shown,
+including the ones marked `n/a`, because that's what you'll see for every prompt in your own guide.
+
+#### Example 1 — a vague prompt (band: `bad` · score 56/100 · verdict `WEAK`)
+
+> **Prompt as sent:** `version-control it to the shared repo`
+> *(a follow-up turn — the previous turn in that session was `commit this`)*
+
+| # | Dimension | Verdict | Severity | Evidence |
+|---|---|---|---|---|
+| D1 | Clarity & explicitness | Partial | Major | "version-control" names a *category* of git operations, not one of them |
+| D2 | Specificity & constraints | Partial | Major | "to the shared repo" names a target, but not which remote or branch |
+| D3 | Output format & length | n/a | — | no meaningful output format beyond the git operation itself |
+| D4 | Context & motivation | n/a | — | motivation wouldn't change which git command applies |
+| D5 | Grounding / reference | n/a | — | no factual grounding needed |
+| D6 | Examples (show-not-tell) | n/a | — | no example needed for a one-line directive |
+| D7 | Positive framing | Met | — | phrased as what to do, not what to avoid |
+| D8 | Uncertainty handling | n/a | — | not a factual-risk task |
+| D9 | Decomposition fit | Met | — | a single step, not artificially split |
+| D10 | Structural economy | Met | — | brief, not over-engineered |
+| E1 | Success is defined | Gap | Major | no notion of "done" — a commit-only, a push, and an opened PR are all consistent with the wording |
+| E2 | Criteria are measurable | Partial | Major | can't binary-check "version-controlled" without knowing which git action was meant |
+| E3 | Multidimensional coverage | n/a | — | a single quality axis is at stake here |
+| E4 | Failure modes anticipated | n/a | — | no new failure mode beyond the verb ambiguity already scored |
+
+**Rewrite `/analyse` would suggest:**
+`commit the deploy.sh change with a message describing the --dry-run flag, then push it to origin/main`
+
+**The lesson:** name the actual git command (commit / push / open a PR) — a category word like
+"version-control" forces the model to guess which one you meant.
+
+#### Example 2 — a strong prompt (band: `excellent` · score 100/100 · verdict `STRONG`)
+
+> **Prompt as sent:** `Add a --dry-run flag to scripts/deploy.sh that prints each command it
+> would run, prefixed with "[dry-run]", and exits 0 without executing anything. Acceptance:
+> bash scripts/deploy.sh --dry-run makes no network calls and prints one line per docker/kubectl
+> command.`
+
+| # | Dimension | Verdict | Severity | Evidence |
+|---|---|---|---|---|
+| D1 | Clarity & explicitness | Met | — | one unambiguous instruction, led by the action verb "Add" |
+| D2 | Specificity & constraints | Met | — | scope is `scripts/deploy.sh`; the boundary ("without executing anything") is explicit |
+| D3 | Output format & length | Met | — | "prints one line per docker/kubectl command" pins the output shape |
+| D4 | Context & motivation | n/a | — | the *why* wouldn't change the implementation of an already well-specified flag |
+| D5 | Grounding / reference | n/a | — | the agent can read `deploy.sh` directly; no external source of truth needed |
+| D6 | Examples (show-not-tell) | n/a | — | the format is fully described without needing an example |
+| D7 | Positive framing | Met | — | every instruction says what TO do (print, prefix, exit 0) |
+| D8 | Uncertainty handling | n/a | — | a verifiable coding task, no hallucination risk |
+| D9 | Decomposition fit | Met | — | simple enough for one prompt, not artificially split |
+| D10 | Structural economy | Met | — | no over-engineering, no dead instructions |
+| E1 | Success is defined | Met | — | the acceptance line defines what correct output is |
+| E2 | Criteria are measurable | Met | — | "makes no network calls and prints one line per ... command" is a binary check |
+| E3 | Multidimensional coverage | Met | — | both correctness (no execution) and format (prefix, one line each) are covered |
+| E4 | Failure modes anticipated | Met | — | "exits 0 without executing anything" directly guards the main failure mode |
+
+**The lesson:** no rewrite needed — imitate this. A single unambiguous instruction, an exact
+output format, and a testable acceptance condition up front leave nothing for the model to guess at.
+
+#### What `/analyse` actually writes for these two prompts
+
+Running `/analyse` over a log containing them writes to three places under
+`<outcomes>` (default `~/.claude/prompt-journal/prompts-review-outcomes`):
+
+1. **One append-only line each in `<outcomes>/scores/<user>.jsonl`:**
+   ```json
+   {"date":"2026-08-11","project":"beta","branch":"feature/DEMO-2_beta","prompt_excerpt":"version-control it to the shared repo","prompt_kind":"chain_step","score":56,"verdict":"WEAK","band":"bad","top_dimensions":["D1","E1"]}
+   {"date":"2026-08-10","project":"alpha","branch":"feature/DEMO-1_alpha","prompt_excerpt":"Add a --dry-run flag to scripts/deploy.sh...","prompt_kind":"one_shot","score":100,"verdict":"STRONG","band":"excellent","top_dimensions":[]}
+   ```
+2. **A per-file review** at `<outcomes>/reviews/<user>/<branch-slug>.md` — each prompt's session
+   rolled into Strengths / Weaknesses / Asset opportunities (see [Turning recurring work into
+   reusable assets](#turning-recurring-work-into-reusable-assets)).
+3. **The compiled guide** at `<outcomes>/guides/<user>.md` — Example 1 lands in **"Anti-patterns
+   to kill"** with the full table above plus the before→after rewrite; Example 2 lands in
+   **"What excellent looks like"** with the full table and no rewrite ("imitate this"). See
+   [Your guide](#your-guide) for the complete rendered format.
+
+That's the whole loop, end to end: what you type → a graded table like the ones above → a banded
+example in your guide → a habit you can apply before your next prompt.
+
+### B. Hands-on but zero-risk: run `/test`
+
+Once the plugin is installed, run this **before** you run `/analyse` on your real journal:
+
+```
+/test
+```
+
+`/test` drives the **entire pipeline** — recording parsing, `prompt-critic` scoring,
+`/analyse`'s full pipeline (all selector forms), `asset-suggester` clustering, `asset-architect`
+(draft-only), `artifact-reviewer`, and `asset-fixer` — against fixture data shipped in
+`tests/fixtures/`, inside a throwaway `_selftest` user and a temp sandbox output directory. It
+prints a `[PASS]`/`[FAIL]` line per check and a final tally, for example:
+
+```
+[PASS] selftest.sh: 34 passed, 0 failed, 2 skipped
+[PASS] prompt-critic returns a scored JSON contract for a strong prompt and a vague one
+[PASS] /analyse writes scores + per-file reviews + a compiled guide across 3 projects
+[PASS] asset-suggester clusters the recurring "commit this" / "version-control it" intent
+[PASS] asset-architect traces a sandbox repo and presents a draft — writes nothing
+[PASS] artifact-reviewer flags the deliberately-bad fixture skill, gate: FAIL
+[PASS] asset-fixer applies only the 2 mechanical findings, skips the 2 that need authoring
+[PASS] /catalog reconciles against every command/skill on disk
+overall: 10/10 PASS
+```
+
+**Why this is genuinely risk-free:** it never touches `~/.claude/prompt-journal/prompts/`
+(your real log), never writes to `~/.claude/prompt-journal/prompts-review-outcomes/` (your real
+scores/guide/suggestions), and never edits `~/.claude/settings.json`. Everything happens under a
+`_selftest` username and a freshly created temp directory that's deleted at the end. If a step
+fails, it tells you which one and why — that's useful signal before you trust it with your own
+history.
+
+Prefer the command line? The deterministic half (no LLM calls) is a plain script:
+```bash
+bash scripts/selftest.sh   # exits non-zero if any check fails; safe, isolated, CI-friendly
+```
+
+---
+
+## Daily use
+
+Just work. Every prompt you submit is appended to a log under `~/.claude/prompt-journal/prompts/`,
+named after the current context, resolved in this order (slashes become hyphens in the filename):
+
+1. **git branch** → `feature/PROJ-1234_x` becomes `feature-PROJ-1234_x.txt`;
+2. **no branch → session name** (from `CLAUDE_SESSION_NAME`, or a named session) →
+   `session/example-session` becomes `session-example-session.txt`;
+3. **no session name → repo root folder** (or the working directory name) →
+   `repo/my-app` becomes `repo-my-app.txt`.
+
+Slash commands (`/build`, `/init`) are recorded too.
+
+**What ran gets recorded alongside what you typed.** Once Claude finishes responding, if it
+invoked any skills, subagents, or Read/Edit/Write/NotebookEdit tools, an `assets-used` block
+(name + resolved path for each) is appended to that same entry — automatically, no action
+needed. Turns that only used other tools (Bash, Grep, search, …) or no tools at all simply get
+no block; that's normal.
+
+**Logs are append-only history — never edit them.** Their sloppiness is the data — and so is
+the `assets-used` block once it's written; it's machine-recorded, not yours to edit, but it's
+still part of the log's history.
+
+---
+
+## The rubric, explained
+
+`prompt-critic` — the skill `/analyse` calls to score each prompt — checks two layers (full
+detail in `skills/prompt-critic/references/rubric.md`; see [the worked
+examples](#a-read-only-a-real-bad-prompt-and-a-real-good-prompt-fully-graded) above for what
+these look like scored):
+
+- **Layer 1 — Design:** clarity & explicit action verb (D1), specificity & constraints
+  (D2), output format (D3), context/motivation (D4), grounding (D5), examples (D6),
+  positive framing (D7), uncertainty handling (D8), decomposition fit (D9), structural
+  economy — no over-engineering (D10).
+- **Layer 2 — Evaluability:** is success defined (E1), measurable (E2), multidimensional
+  (E3), and are failure modes anticipated (E4).
+
+It produces a JSON contract (score 0–100, verdict `STRONG/ADEQUATE/WEAK/POOR/BLOCKED`, a
+per-dimension finding with evidence, a rewritten prompt, and suggested eval criteria) then
+a short Markdown summary.
+
+**Short prompts and chains are handled fairly.** Most real prompts are terse follow-up turns
+that lean on session context (`"push it"`, `"are we good to merge?"`). The critic scores these
+as **chain steps**: it judges them against what the session already resolved and **never
+penalizes brevity** — a one-word `"yes"` can be an excellent turn. It only flags a reference
+the session genuinely left ambiguous, an undefined verb, or an untestable success word. See
+`skills/prompt-critic/references/conversational-chains.md`.
+
+**Real execution context sharpens the grade, without becoming a new dimension.** When an
+entry has an `assets-used` block — recorded automatically after each turn (see
+[Daily use](#daily-use)) — the critic reads it as evidence, e.g. a "fix"/"add" prompt whose
+recorded tools show only reads and no edits is corroborating evidence for an E1/E2 gap it
+would otherwise have to infer blind. It never scores the tool use itself, and it never
+penalizes a well-specified prompt just because the agent decided no change was needed.
+
+---
+
+## Your guide
+
+`~/.claude/prompt-journal/prompts-review-outcomes/guides/<user>.md` is your living,
+personalised output, written by `/analyse`. It has:
+
+- a **Snapshot** — prompts reviewed, band counts (excellent/good/bad), and trend vs. last
+  time;
+- **What excellent looks like** — your own strongest prompts, with why they work;
+- **Good, one fix away** — near-misses with the single high-leverage fix;
+- **Anti-patterns to kill** — your weakest prompts, each with a before→after rewrite;
+- **Habits to build** and **Habits you already have**.
+
+Every example is one of *your* real prompts, quoted verbatim with source and date. The
+guide is regenerated by merging — it keeps what still teaches, adds new examples, and
+retires stale ones. Format is fixed in
+`skills/prompt-example-curator/references/guide-format.md`.
+
+**Human-friendly formats.** The guide has one structured source, `<outcomes>/guides/<user>.json`,
+and three rendered views — **Markdown, PDF, and Word** — produced by
+[`scripts/render-guide.py`](#scriptsrender-guidepy-shell-command-not-a-slash-command).
+Each reviewed prompt renders a **rubric scorecard** (every D1–D10 / E1–E4 dimension marked
+Met / Partial / Missing / n-a, with evidence) and a **transformation table** (each gap →
+a concrete rewrite + the principle it teaches).
+
+---
+
+## Turning recurring work into reusable assets
+
+Reviewing prompts also surfaces **what you keep doing** — and repeated work is a signal to
+build a reusable Claude Code asset. `/analyse` records those signals; four commands act on
+them (see the [reference table](#command-reference) for their exact input/outcome):
+
+- **`asset-suggester`** (runs automatically inside `/analyse`) clusters recurring
+  intents/tools/tasks across your whole journal into candidates in `suggestions/<user>.json`
+  — each typed provisionally as a **skill / subagent / hook / slash command / rule / script**,
+  with the evidence (your real repeated prompts), a proposed trigger, and where it should live.
+- **`/scaffold-asset <id>`** makes the authoritative call: applies a decision matrix (grounded
+  in Anthropic's guidance — see `skills/asset-architect/references/sources.md`),
+  localizes placement by reading the **target repo's `CLAUDE.md` + `.claude/rules/`**, drafts
+  the asset to Anthropic's authoring standards, and **writes it only after you approve**.
+- **`/review-asset`** audits an asset (new or old) against the same quality gate, any time you
+  want a second opinion — including instructional-semantics checks (Section G: contradiction,
+  ambiguity, persona consistency, cognitive load, semantic coverage, composition-conflict).
+- **`/fix-asset`** applies the review's `mechanical` findings verbatim (a dangling reference, an
+  invalid frontmatter key) without a full scaffolding pass; anything needing judgment is routed
+  back to `/scaffold-asset`.
+
+The guiding principle: *repetition tells you to capture a need; the signal tells you the type* —
+a repeated **procedure** → skill, a **fact** → CLAUDE.md/rule, a **"whenever X" guarantee** →
+hook (memory only steers; hooks enforce), an **isolated task** → subagent. `asset-architect`
+complements your global `~/.claude/rules/sdlc-asset-authoring.md` and always scaffolds into the
+**target** repo you point it at, never into this plugin itself.
+
+---
+
+## Getting the most out of it
+
+The tool does the recording and grading for you; the improvement is still on you to act on. In
+priority order:
+
+1. **Run `/analyse` on a cadence, not once.** A single run scores what you have so far — the
+   trend line, the habit tracking, and a *compiled* (not per-session) guide only get meaningful
+   across multiple runs over real time. Weekly is a reasonable default.
+2. **Read "Habits to build" before your next work session**, not just the scorecard. The
+   rubric tables are the evidence; the habit list is the actual takeaway.
+3. **Don't chase the score.** A 100 on a trivial prompt teaches you nothing a 100 on a hard one
+   does. Read *why* a prompt scored the way it did (the evidence column), not just the number.
+4. **Turn the third repeat into an asset.** If `/analyse` (via `asset-suggester`) keeps
+   surfacing the same intent, that's the signal to run `/scaffold-asset` rather than keep
+   re-typing the same longer prompt by hand.
+5. **Calibrate before trusting scores as a gate.** If you ever wire `prompt-critic` into CI or
+   a merge gate, hand-label ~50–100 prompts strong/weak first and check agreement before
+   believing the number (`skills/prompt-critic/references/usage-and-integration.md`). Until
+   then, treat scores as coaching, not enforcement.
+
+### Rolling it out to a team
+
+- **Everyone installs their own copy of the plugin.** Each teammate runs
+  `/plugin marketplace add waqar40/prompt-improvement-framework` and `/plugin install
+  prompt-journal` — no shared clone or shared install to coordinate. Each person's prompts
+  land in **their own** `~/.claude/prompt-journal/prompts/` (relocate with `--journal <path>`
+  or `PROMPT_JOURNAL_DIR`), and scores/guides/suggestions are keyed by username under their own
+  outcomes dir (`<outcomes>/scores/<user>.jsonl`, `<outcomes>/guides/<user>.*`,
+  `<outcomes>/suggestions/<user>.json`) — nothing to collide on, and `PROMPT_OUTCOMES_DIR` can
+  point anywhere per person (a shared network drive, for instance, if you want to compare directly).
+- **Share the method, compare the guides — not the raw logs.** The guides are the interesting
+  artifact to share (they're already curated); raw prompt logs may contain anything anyone
+  typed, so treat sharing those as a separate, explicit decision, not a default.
+- **Keep the rubric stable.** Scores are only comparable over time if the rubric, band
+  mapping, and guide format don't drift. Change them deliberately, in one place, and note
+  it — see `CLAUDE.md`.
 
 ---
 
@@ -205,13 +528,14 @@ agent, reconciled against what's actually installed on disk (so it can't drift o
 ### `/test`
 
 **What it does** — end-to-end self-test of the whole framework, in complete isolation from
-your real data.
+your real data. See [Try it dry-run](#try-it-dry-run--see-it-work-before-you-trust-it) above
+for a worked example of what it prints.
 
 | | |
 |---|---|
 | **Input** | None. |
 | **Outcome** | Runs `scripts/selftest.sh` (deterministic recorder/configure/parser/renderer checks), then drives `prompt-critic`, `/analyse` (all selector forms), `asset-suggester`, `asset-architect` (draft-only), `artifact-reviewer` + `asset-fixer` (against the deliberately defective `tests/fixtures/assets/bad-skill/` fixture), and `/catalog` over fixtures under a throwaway `_selftest` user. Prints a PASS/FAIL checklist, then tears down every test artifact and temp dir it created. **Never touches your real journal, scores, guide, suggestions, or settings.** |
-| **When to run it** | After changing any script, skill, or fixture in this repo, to confirm nothing broke. |
+| **When to run it** | Right after installing (see [Try it dry-run](#try-it-dry-run--see-it-work-before-you-trust-it)), and again after changing any script, skill, or fixture in this repo, to confirm nothing broke. |
 
 ### `scripts/render-guide.py` *(shell command, not a slash command)*
 
@@ -302,243 +626,11 @@ the `PostToolUse`/`Stop` hooks still works — you just won't get `assets-used` 
 
 Send a throwaway prompt in any repo, then check that a `<branch>.txt` appeared under
 `~/.claude/prompt-journal/prompts/` with a `===== [timestamp] branch=… =====` entry.
-(`/configure` already self-tests this, so it should just work.) That's it — recording is now
-automatic.
-
-> **Do not paste secrets into prompts.** Prompts are stored verbatim in plain-text logs.
-> Treat the journal like any other source-controlled text: no credentials, tokens, or
-> customer data. This is a security requirement, not a suggestion.
+(`/configure` already self-tests this, so it should just work.) Then run `/test` (see [Try it
+dry-run](#try-it-dry-run--see-it-work-before-you-trust-it)) for a full, zero-risk exercise of
+the whole pipeline before you point `/analyse` at your real journal.
 
 ---
-
-## Daily use
-
-Just work. Every prompt you submit is appended to a log under `~/.claude/prompt-journal/prompts/`,
-named after the current context, resolved in this order (slashes become hyphens in the filename):
-
-1. **git branch** → `feature/PROJ-1234_x` becomes `feature-PROJ-1234_x.txt`;
-2. **no branch → session name** (from `CLAUDE_SESSION_NAME`, or a named session) →
-   `session/example-session` becomes `session-example-session.txt`;
-3. **no session name → repo root folder** (or the working directory name) →
-   `repo/my-app` becomes `repo-my-app.txt`.
-
-Slash commands (`/build`, `/init`) are recorded too.
-
-**What ran gets recorded alongside what you typed.** Once Claude finishes responding, if it
-invoked any skills, subagents, or Read/Edit/Write/NotebookEdit tools, an `assets-used` block
-(name + resolved path for each) is appended to that same entry — automatically, no action
-needed. Turns that only used other tools (Bash, Grep, search, …) or no tools at all simply get
-no block; that's normal.
-
-**Logs are append-only history — never edit them.** Their sloppiness is the data — and so is
-the `assets-used` block once it's written; it's machine-recorded, not yours to edit, but it's
-still part of the log's history.
-
----
-
-## What the rubric checks
-
-`prompt-critic` — the skill `/analyse` calls to score each prompt — checks two layers (full
-detail in `skills/prompt-critic/references/rubric.md`):
-
-- **Layer 1 — Design:** clarity & explicit action verb (D1), specificity & constraints
-  (D2), output format (D3), context/motivation (D4), grounding (D5), examples (D6),
-  positive framing (D7), uncertainty handling (D8), decomposition fit (D9), structural
-  economy — no over-engineering (D10).
-- **Layer 2 — Evaluability:** is success defined (E1), measurable (E2), multidimensional
-  (E3), and are failure modes anticipated (E4).
-
-It produces a JSON contract (score 0–100, verdict `STRONG/ADEQUATE/WEAK/POOR/BLOCKED`, a
-per-dimension finding with evidence, a rewritten prompt, and suggested eval criteria) then
-a short Markdown summary.
-
-**Short prompts and chains are handled fairly.** Most real prompts are terse follow-up turns
-that lean on session context (`"push it"`, `"are we good to merge?"`). The critic scores these
-as **chain steps**: it judges them against what the session already resolved and **never
-penalizes brevity** — a one-word `"yes"` can be an excellent turn. It only flags a reference
-the session genuinely left ambiguous, an undefined verb, or an untestable success word. See
-`skills/prompt-critic/references/conversational-chains.md`.
-
-**Real execution context sharpens the grade, without becoming a new dimension.** When an
-entry has an `assets-used` block — recorded automatically after each turn (see
-[Daily use](#daily-use)) — the critic reads it as evidence, e.g. a "fix"/"add" prompt whose
-recorded tools show only reads and no edits is corroborating evidence for an E1/E2 gap it
-would otherwise have to infer blind. It never scores the tool use itself, and it never
-penalizes a well-specified prompt just because the agent decided no change was needed.
-
----
-
-## See it in action: one bad prompt, one good prompt
-
-Two real prompts from this repo's own test fixtures (`tests/fixtures/logs/feature-DEMO-2_beta.txt`
-and `feature-DEMO-1_alpha.txt`), scored by `prompt-critic` exactly as `/analyse` would score
-yours. This is the **complete** rubric table, not a summary — every dimension is graded and shown,
-including the ones marked `n/a`, because that's what you'll see for every prompt in your own guide.
-
-### Example 1 — a vague prompt (band: `bad` · score 56/100 · verdict `WEAK`)
-
-> **Prompt as sent:** `version-control it to the shared repo`
-> *(a follow-up turn — the previous turn in that session was `commit this`)*
-
-| # | Dimension | Verdict | Severity | Evidence |
-|---|---|---|---|---|
-| D1 | Clarity & explicitness | Partial | Major | "version-control" names a *category* of git operations, not one of them |
-| D2 | Specificity & constraints | Partial | Major | "to the shared repo" names a target, but not which remote or branch |
-| D3 | Output format & length | n/a | — | no meaningful output format beyond the git operation itself |
-| D4 | Context & motivation | n/a | — | motivation wouldn't change which git command applies |
-| D5 | Grounding / reference | n/a | — | no factual grounding needed |
-| D6 | Examples (show-not-tell) | n/a | — | no example needed for a one-line directive |
-| D7 | Positive framing | Met | — | phrased as what to do, not what to avoid |
-| D8 | Uncertainty handling | n/a | — | not a factual-risk task |
-| D9 | Decomposition fit | Met | — | a single step, not artificially split |
-| D10 | Structural economy | Met | — | brief, not over-engineered |
-| E1 | Success is defined | Gap | Major | no notion of "done" — a commit-only, a push, and an opened PR are all consistent with the wording |
-| E2 | Criteria are measurable | Partial | Major | can't binary-check "version-controlled" without knowing which git action was meant |
-| E3 | Multidimensional coverage | n/a | — | a single quality axis is at stake here |
-| E4 | Failure modes anticipated | n/a | — | no new failure mode beyond the verb ambiguity already scored |
-
-**Rewrite `/analyse` would suggest:**
-`commit the deploy.sh change with a message describing the --dry-run flag, then push it to origin/main`
-
-**The lesson:** name the actual git command (commit / push / open a PR) — a category word like
-"version-control" forces the model to guess which one you meant.
-
-### Example 2 — a strong prompt (band: `excellent` · score 100/100 · verdict `STRONG`)
-
-> **Prompt as sent:** `Add a --dry-run flag to scripts/deploy.sh that prints each command it
-> would run, prefixed with "[dry-run]", and exits 0 without executing anything. Acceptance:
-> bash scripts/deploy.sh --dry-run makes no network calls and prints one line per docker/kubectl
-> command.`
-
-| # | Dimension | Verdict | Severity | Evidence |
-|---|---|---|---|---|
-| D1 | Clarity & explicitness | Met | — | one unambiguous instruction, led by the action verb "Add" |
-| D2 | Specificity & constraints | Met | — | scope is `scripts/deploy.sh`; the boundary ("without executing anything") is explicit |
-| D3 | Output format & length | Met | — | "prints one line per docker/kubectl command" pins the output shape |
-| D4 | Context & motivation | n/a | — | the *why* wouldn't change the implementation of an already well-specified flag |
-| D5 | Grounding / reference | n/a | — | the agent can read `deploy.sh` directly; no external source of truth needed |
-| D6 | Examples (show-not-tell) | n/a | — | the format is fully described without needing an example |
-| D7 | Positive framing | Met | — | every instruction says what TO do (print, prefix, exit 0) |
-| D8 | Uncertainty handling | n/a | — | a verifiable coding task, no hallucination risk |
-| D9 | Decomposition fit | Met | — | simple enough for one prompt, not artificially split |
-| D10 | Structural economy | Met | — | no over-engineering, no dead instructions |
-| E1 | Success is defined | Met | — | the acceptance line defines what correct output is |
-| E2 | Criteria are measurable | Met | — | "makes no network calls and prints one line per ... command" is a binary check |
-| E3 | Multidimensional coverage | Met | — | both correctness (no execution) and format (prefix, one line each) are covered |
-| E4 | Failure modes anticipated | Met | — | "exits 0 without executing anything" directly guards the main failure mode |
-
-**The lesson:** no rewrite needed — imitate this. A single unambiguous instruction, an exact
-output format, and a testable acceptance condition up front leave nothing for the model to guess at.
-
-### What `/analyse` actually writes for these two prompts
-
-Running `/analyse` over a log containing them writes to three places under
-`<outcomes>` (default `~/.claude/prompt-journal/prompts-review-outcomes`):
-
-1. **One append-only line each in `<outcomes>/scores/<user>.jsonl`:**
-   ```json
-   {"date":"2026-08-11","project":"beta","branch":"feature/DEMO-2_beta","prompt_excerpt":"version-control it to the shared repo","prompt_kind":"chain_step","score":56,"verdict":"WEAK","band":"bad","top_dimensions":["D1","E1"]}
-   {"date":"2026-08-10","project":"alpha","branch":"feature/DEMO-1_alpha","prompt_excerpt":"Add a --dry-run flag to scripts/deploy.sh...","prompt_kind":"one_shot","score":100,"verdict":"STRONG","band":"excellent","top_dimensions":[]}
-   ```
-2. **A per-file review** at `<outcomes>/reviews/<user>/<branch-slug>.md` — each prompt's session
-   rolled into Strengths / Weaknesses / Asset opportunities (see [Turning recurring work into
-   reusable assets](#turning-recurring-work-into-reusable-assets)).
-3. **The compiled guide** at `<outcomes>/guides/<user>.md` — Example 1 lands in **"Anti-patterns
-   to kill"** with the full table above plus the before→after rewrite; Example 2 lands in
-   **"What excellent looks like"** with the full table and no rewrite ("imitate this"). See
-   [Your guide](#your-guide) below for the complete rendered format.
-
-That's the whole loop, end to end: what you type → a graded table like the ones above → a banded
-example in your guide → a habit you can apply before your next prompt.
-
----
-
-## Your guide
-
-`~/.claude/prompt-journal/prompts-review-outcomes/guides/<user>.md` is your living,
-personalised output, written by `/analyse`. It has:
-
-- a **Snapshot** — prompts reviewed, band counts (excellent/good/bad), and trend vs. last
-  time;
-- **What excellent looks like** — your own strongest prompts, with why they work;
-- **Good, one fix away** — near-misses with the single high-leverage fix;
-- **Anti-patterns to kill** — your weakest prompts, each with a before→after rewrite;
-- **Habits to build** and **Habits you already have**.
-
-Every example is one of *your* real prompts, quoted verbatim with source and date. The
-guide is regenerated by merging — it keeps what still teaches, adds new examples, and
-retires stale ones. Format is fixed in
-`skills/prompt-example-curator/references/guide-format.md`.
-
-**Human-friendly formats.** The guide has one structured source, `<outcomes>/guides/<user>.json`,
-and three rendered views — **Markdown, PDF, and Word** — produced by
-[`scripts/render-guide.py`](#scriptsrender-guidepy-shell-command-not-a-slash-command) (above).
-Each reviewed prompt renders a **rubric scorecard** (every D1–D10 / E1–E4 dimension marked
-Met / Partial / Missing / n-a, with evidence) and a **transformation table** (each gap →
-a concrete rewrite + the principle it teaches).
-
----
-
-## Turning recurring work into reusable assets
-
-Reviewing prompts also surfaces **what you keep doing** — and repeated work is a signal to
-build a reusable Claude Code asset. `/analyse` records those signals; two commands act on
-them (see the [reference table](#command-reference) for their exact input/outcome):
-
-- **`asset-suggester`** (runs automatically inside `/analyse`) clusters recurring
-  intents/tools/tasks across your whole journal into candidates in `suggestions/<user>.json`
-  — each typed provisionally as a **skill / subagent / hook / slash command / rule / script**,
-  with the evidence (your real repeated prompts), a proposed trigger, and where it should live.
-- **`/scaffold-asset <id>`** makes the authoritative call: applies a decision matrix (grounded
-  in Anthropic's guidance — see `skills/asset-architect/references/sources.md`),
-  localizes placement by reading the **target repo's `CLAUDE.md` + `.claude/rules/`**, drafts
-  the asset to Anthropic's authoring standards, and **writes it only after you approve**.
-- **`/review-asset`** audits an asset (new or old) against the same quality gate, any time you
-  want a second opinion — including instructional-semantics checks (Section G: contradiction,
-  ambiguity, persona consistency, cognitive load, semantic coverage, composition-conflict).
-- **`/fix-asset`** applies the review's `mechanical` findings verbatim (a dangling reference, an
-  invalid frontmatter key) without a full scaffolding pass; anything needing judgment is routed
-  back to `/scaffold-asset`.
-
-The guiding principle: *repetition tells you to capture a need; the signal tells you the type* —
-a repeated **procedure** → skill, a **fact** → CLAUDE.md/rule, a **"whenever X" guarantee** →
-hook (memory only steers; hooks enforce), an **isolated task** → subagent. `asset-architect`
-complements your global `~/.claude/rules/sdlc-asset-authoring.md` and always scaffolds into the
-**target** repo you point it at, never into this plugin itself.
-
----
-
-## Rolling it out to the team
-
-- **Everyone installs their own copy of the plugin.** Each teammate runs
-  `/plugin marketplace add waqar40/prompt-improvement-framework` and `/plugin install
-  prompt-journal` — no shared clone or shared install to coordinate. Each person's prompts
-  land in **their own** `~/.claude/prompt-journal/prompts/` (relocate with `--journal <path>`
-  or `PROMPT_JOURNAL_DIR`), and scores/guides/suggestions are keyed by username under their own
-  outcomes dir (`<outcomes>/scores/<user>.jsonl`, `<outcomes>/guides/<user>.*`,
-  `<outcomes>/suggestions/<user>.json`) — nothing to collide on, and `PROMPT_OUTCOMES_DIR` can
-  point anywhere per person (a shared network drive, for instance, if you want to compare directly).
-- **Share the method, compare the guides.** The guides are the interesting artifact — swap
-  them in a team channel, compare recurring gaps, and turn the sharpest before/after
-  examples into shared prompting standards.
-- **Keep the rubric stable.** Scores are only comparable over time if the rubric, band
-  mapping, and guide format don't drift. Change them deliberately, in one place, and note
-  it — see `CLAUDE.md`.
-- **Calibrate before trusting scores as a gate.** If you wire `prompt-critic` into CI,
-  hand-label ~50–100 prompts strong/weak first and check agreement before believing the
-  number (`skills/prompt-critic/references/usage-and-integration.md`).
-
----
-
-## Testing the framework
-
-Run **`/test`** (see the [reference table](#test)) to verify everything end to end, in an
-isolated sandbox that never touches your real journal, settings, scores, guide, or
-suggestions. The underlying script harness alone is CI-friendly:
-
-```bash
-bash scripts/selftest.sh   # exits non-zero if any check fails
-```
 
 ## Repo map
 
@@ -591,6 +683,8 @@ Code manages and can relocate on update).
 If you cloned this repo for development instead of installing it via the marketplace, the
 plugin directory above is just the clone root — same layout, different parent path.
 
+---
+
 ## Troubleshooting
 
 - **No log file appears** — just re-run `/configure`; it self-tests the recorder directly
@@ -609,3 +703,6 @@ plugin directory above is just the clone root — same layout, different parent 
   need `--legacy-hook` too (`UserPromptSubmit` alone doesn't cover them). Turns that only used
   Bash/Grep/other non-whitelisted tools, or no tools at all, correctly get no block — that's
   not a bug.
+- **`/test` fails on a step** — that's the point of running it: it tells you exactly which
+  stage broke before you ever point `/analyse` at real data. Re-run `/configure` first (a
+  broken recorder cascades into several `/test` steps), then re-run `/test`.
