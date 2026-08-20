@@ -19,6 +19,7 @@ lazy ones to kill.
 [How it works](#how-it-works) · [Quick start](#quick-start-3-steps) ·
 [Try it dry-run](#try-it-dry-run--see-it-work-before-you-trust-it) · [Daily use](#daily-use) ·
 [The rubric, explained](#the-rubric-explained) · [Your guide](#your-guide) ·
+[Your adaptive focus](#your-adaptive-focus) ·
 [Turning recurring work into assets](#turning-recurring-work-into-reusable-assets) ·
 [Getting the most out of it](#getting-the-most-out-of-it) ·
 [Command reference](#command-reference) · [Setup, in detail](#setup-in-detail) ·
@@ -38,6 +39,10 @@ Set expectations before you install anything — this is a coaching tool, not ma
 - A **personal guide** — your strongest prompts, your near-misses, your anti-patterns with
   before→after rewrites, and durable habits to build — that gets *better*, not bigger, over
   time (it merges, retiring stale examples for sharper ones).
+- An **adaptive focus** — not just a snapshot: `/analyse` tracks each of the 14 rubric
+  dimensions separately across runs, tells you which one you're weakest on *right now*, how
+  fast it's moving, and gives you concrete steps for that one thing — see [Your adaptive
+  focus](#your-adaptive-focus).
 - A **backlog of reusable-asset ideas** (skills, hooks, commands) mined from what you actually
   keep asking for, with a builder (`/scaffold-asset`) and an auditor (`/review-asset` +
   `/fix-asset`) for them.
@@ -49,7 +54,10 @@ Set expectations before you install anything — this is a coaching tool, not ma
 - **Actually reading the guide** and trying the "habits to build" — the tool surfaces the
   pattern, it doesn't change your typing for you.
 - A few hundred logged prompts before the guide's snapshot/trend numbers say much. A handful
-  of prompts is not enough signal — don't judge it (or yourself) off day one.
+  of prompts is not enough signal — don't judge it (or yourself) off day one. The adaptive focus
+  specifically needs **two `/analyse` runs** before it can say anything about pace — the first
+  run is always a "provisional" baseline, by design (see [Your adaptive
+  focus](#your-adaptive-focus)).
 
 **What it deliberately does NOT do:**
 - It does **not** intercept, block, or rewrite your prompt before Claude sees it — it's a
@@ -98,12 +106,17 @@ real execution context, not just the words you typed:
         │
         ▼
  prompt-critic  ──────────►  <outcomes>/scores/<user>.jsonl   skill: rate each prompt
- (scores + rewrites,         (append-only)                     — using assets-used as
-  assets-used as context)                                        context, never a score input
+ (scores + rewrites,         (append-only, now with a         — using assets-used as
+  assets-used as context)      per-dimension `dims` map)         context, never a score input
+        │
+        ▼
+ progress-coach  ─────────►  <outcomes>/progress/<user>.{json,md}   deterministic EWMA/pace/
+ (adaptive focus + pace)     (this run's state, merged forward)      mastery math, then 1 focus
         │
         ▼
  prompt-example-curator ──►  <outcomes>/guides/<user>.{json,md,pdf,docx}   band + examples
- (curates the guide)
+ (curates the guide,                                                       + embeds the focus
+  embeds the focus teaser)
         │
         ▼
  asset-suggester  ────────►  <outcomes>/suggestions/<user>.json   cluster recurring work into
@@ -377,6 +390,41 @@ a concrete rewrite + the principle it teaches).
 
 ---
 
+## Your adaptive focus
+
+The guide above is a **snapshot** — it tells you what's strong and weak *this run*. On top of
+it, `/analyse` runs an **adaptive coaching loop**: it tracks each of the 14 rubric dimensions
+*separately* across every run, and instead of restating a generic habit list, it picks the
+**single dimension** most worth your attention right now and tells you how fast it's actually
+moving. Full design rationale (the research behind it, and why): `docs/adr/0001-adaptive-personalized-progress-coaching.md`.
+
+**What it tracks, per dimension (D1–D10, E1–E4):**
+- **Level** — a smoothed estimate of how often that dimension scores `met`, weighted toward
+  recent prompts so one bad day doesn't read as a collapse, and shrunk toward neutral until
+  there's enough evidence to trust it (no premature verdicts off 1–2 prompts).
+- **Pace** — `improving_fast` / `improving_slow` / `flat` / `regressing`, computed between this
+  `/analyse` run and the last. A "flat" dimension for 3 runs running triggers a **tactic
+  change** (a different concrete rule, not the same advice a third time) rather than nagging.
+- **Mastered** — once a dimension is reliably strong across multiple runs (not one lucky one),
+  it graduates and the coaching moves to your next-weakest area — **one habit at a time**, never
+  several competing focuses.
+- **Regression alerts** — if a dimension you'd already mastered starts slipping, it's flagged
+  immediately and separately, regardless of what's currently in focus.
+
+**Where it shows up:**
+- `guides/<user>.md` gets a short **"Your Focus Right Now"** teaser at the top.
+- `<outcomes>/progress/<user>.md` has the full picture — every dimension's level and pace, the
+  focus dimension's concrete steps (pulled from a fixed playbook, not improvised), and any
+  regression alerts.
+
+**Two runs before pace means anything.** The very first `/analyse` after this feature is added
+(or your very first run ever) is always a **provisional baseline** — no pace, no mastery claims,
+just a ranked starting point. Real trend data starts appearing from the second run on. This is
+deliberate, not a bug: the underlying math (documented in the ADR) refuses to guess at a trend
+from a single data point.
+
+---
+
 ## Turning recurring work into reusable assets
 
 Reviewing prompts also surfaces **what you keep doing** — and repeated work is a signal to
@@ -475,7 +523,7 @@ Idempotent — re-running never double-counts a prompt.
 | | |
 |---|---|
 | **Input** | Optional **selector** (pick at most one) — a file/dir path (e.g. `~/.claude/prompt-journal/prompts/master.txt`), `--project <name>`, or `--branch <name>`. **Omit it entirely to analyse your whole journal** (the default, and the normal way to run it). Optional `--user <name>` — whose store/guide to update; defaults to your OS username. |
-| **Outcome** | For each log processed: a per-file review at `<outcomes>/reviews/<user>/<branch>.md` (that session's strengths/weaknesses + asset opportunities, grounded in what actually ran where available). Across the whole run: new lines appended to the append-only score store `<outcomes>/scores/<user>.jsonl` (each carrying `assets_used`); your guide regenerated at `<outcomes>/guides/<user>.{json,md,pdf,docx}`; asset candidates refreshed at `<outcomes>/suggestions/<user>.json`. |
+| **Outcome** | For each log processed: a per-file review at `<outcomes>/reviews/<user>/<branch>.md` (that session's strengths/weaknesses + asset opportunities, grounded in what actually ran where available). Across the whole run: new lines appended to the append-only score store `<outcomes>/scores/<user>.jsonl` (each carrying `assets_used` + a per-dimension `dims` map); your adaptive focus updated at `<outcomes>/progress/<user>.{json,md}` (see [Your adaptive focus](#your-adaptive-focus)); your guide regenerated at `<outcomes>/guides/<user>.{json,md,pdf,docx}` (embedding the current focus); asset candidates refreshed at `<outcomes>/suggestions/<user>.json`. |
 | **When to run it** | Regularly — weekly is a reasonable cadence. Narrow it (`--project`, `--branch`, a file) only when you want to re-check one slice without waiting on the whole journal. |
 
 ### `/scaffold-asset`
@@ -644,7 +692,8 @@ Code manages and can relocate on update).
 │   ├── prompts/                          ← INPUT: raw per-branch prompt logs (append-only)
 │   │   └── <branch>.txt
 │   └── prompts-review-outcomes/          ← OUTPUT: everything /analyse produces
-│       ├── scores/<user>.jsonl               append-only score store (project, root, branch, score, band, …)
+│       ├── scores/<user>.jsonl               append-only score store (project, root, branch, run_id, score, band, dims, …)
+│       ├── progress/<user>.{json,md}         adaptive focus + pace — this run's state, merged forward (never hand-edit)
 │       ├── guides/<user>.{json,md,pdf,docx}  structured guide (json = source of truth) + rendered views
 │       ├── suggestions/<user>.json           reusable-asset candidates (machine-readable)
 │       └── reviews/<user>/<branch>.md        per-file session reviews (strengths/weaknesses + asset opportunities)
@@ -657,13 +706,19 @@ Code manages and can relocate on update).
     scripts/record-prompt.{ps1,sh}    recorder hook (writes the logs; drops a per-turn marker)
     scripts/record-tool-use.{ps1,sh}  buffers asset invocations for the current turn (PostToolUse hook)
     scripts/record-turn-end.{ps1,sh}  flushes the buffer into an assets-used block (Stop hook)
-    scripts/render-guide.py           JSON guide -> Markdown + PDF + Word renderer
+    scripts/render-guide.py           JSON guide -> Markdown + PDF + Word renderer (incl. the focus teaser)
+    scripts/compute-progress.py       deterministic EWMA/pace/mastery engine behind progress-coach (no LLM call)
     scripts/selftest.sh               deterministic sandboxed self-test (first step of /test)
     scripts/validate-frontmatter.py   deterministic frontmatter gate (first step of /review-asset)
     tests/fixtures/                   sample logs + guide used by the /test play
         assets/bad-skill/                 a deliberately defective skill (mechanical + needs-authoring findings)
+        progress/                         two-checkpoint score-store fixture for progress-coach's self-test
+    docs/adr/0001-adaptive-personalized-progress-coaching.md   the adaptive-coaching design decision + research
     skills/prompt-critic/             scoring rubric + rewrite (+ optional asset_hint)
-    skills/prompt-example-curator/    banding + guide curation
+    skills/progress-coach/            adaptive focus + pace — reads compute-progress.py's output, authors the plan
+        references/algorithm.md           field glossary — what the script already decided, never recompute it
+        references/dimension-playbooks.md concrete rule(s)/exercise(s) per rubric dimension
+    skills/prompt-example-curator/    banding + guide curation (embeds progress-coach's teaser)
     skills/asset-suggester/           clusters recurring work into asset candidates
     skills/asset-architect/           multi-source grounding consumer: type + placement + scaffold
         references/artifact-anatomy.md      the skeleton of each emitted artifact (skill/agent/hook/…)

@@ -272,6 +272,46 @@ if [ "$HAVE_PY" -eq 1 ]; then
 else skip "no python3 — render-guide check"; fi
 
 # ---------------------------------------------------------------------------------------------
+section "compute-progress.py — cold-start, mastery graduation, and regression alerts"
+if [ "$HAVE_PY" -eq 1 ]; then
+  PF="$FIX/progress"
+  python3 "$REPO/scripts/compute-progress.py" "$PF/scores-run1.jsonl" --user t --out "$SB/p1.json" >/dev/null 2>&1
+  python3 - "$SB/p1.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert d["cold_start"] is True
+assert d["dimensions"]["D7"]["mastered"] is False, "must not claim mastery during cold_start"
+assert d["focus"]["dimension"] == "D5" and d["focus"]["provisional"] is True
+PY
+  [ $? -eq 0 ] && pass "run1 (cold start): no mastery claims, focus=D5, provisional" || fail "run1 cold-start assertions failed"
+
+  python3 "$REPO/scripts/compute-progress.py" "$PF/scores-through-run2.jsonl" --user t --prev "$SB/p1.json" --out "$SB/p2.json" >/dev/null 2>&1
+  python3 - "$SB/p2.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert d["cold_start"] is False
+assert d["dimensions"]["D7"]["mastered"] is True, "D7 (all-met both checkpoints) should graduate"
+assert d["focus"]["dimension"] == "D5", "focus should stick to D5 (momentum rule)"
+assert d["regression_alerts"] == [], "nothing should regress yet"
+PY
+  [ $? -eq 0 ] && pass "run2: D7 masters, focus stays D5, no regressions yet" || fail "run2 mastery/focus assertions failed"
+
+  python3 "$REPO/scripts/compute-progress.py" "$PF/scores-through-run3.jsonl" --user t --prev "$SB/p2.json" --out "$SB/p3.json" >/dev/null 2>&1
+  python3 - "$SB/p3.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert d["dimensions"]["D7"]["mastered"] is False, "D7 crashed to gap -> demoted"
+assert len(d["regression_alerts"]) == 1 and d["regression_alerts"][0]["dimension"] == "D7", d["regression_alerts"]
+assert d["focus"]["dimension"] == "D5", "focus must not have been disturbed by D7's regression"
+PY
+  [ $? -eq 0 ] && pass "run3: exactly 1 regression alert (D7), focus undisturbed (D5)" || fail "run3 regression-alert assertions failed"
+
+  # Idempotent/deterministic: same input -> byte-identical numeric fields, twice in a row
+  python3 "$REPO/scripts/compute-progress.py" "$PF/scores-through-run3.jsonl" --user t --prev "$SB/p2.json" --out "$SB/p3b.json" >/dev/null 2>&1
+  diff -q "$SB/p3.json" "$SB/p3b.json" >/dev/null 2>&1 && pass "deterministic: re-running on identical inputs is byte-identical" || fail "compute-progress.py is non-deterministic"
+else skip "no python3 — compute-progress.py checks"; fi
+
+# ---------------------------------------------------------------------------------------------
 section "recorder — skips harness task-notification machine-output"
 J5="$SB/j5"
 printf '{"prompt":"<task-notification><task-id>x</task-id> completed</task-notification>","cwd":"%s"}' "$SB/plain" \

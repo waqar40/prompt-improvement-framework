@@ -1,15 +1,16 @@
 ---
 name: prompt-journal
-description: Use to run the end-to-end prompt-journal pipeline over recorded logs — by default the WHOLE journal (every log across every project/branch), or narrowed to one project, branch, or file. Scores every prompt with prompt-critic (treating the entries under one branch as one session/chain), writes a per-file review, appends results to the per-user score store, compiles an overall guide via prompt-example-curator, then refreshes machine-readable asset suggestions via asset-suggester. Triggers include "review my prompt journal", "run the prompt pipeline", "analyse today's prompts", "analyse all my prompts", "score this log and update my guide", and the /analyse and /prompt-review commands.
+description: Use to run the end-to-end prompt-journal pipeline over recorded logs — by default the WHOLE journal (every log across every project/branch), or narrowed to one project, branch, or file. Scores every prompt with prompt-critic (treating the entries under one branch as one session/chain), writes a per-file review, appends results to the per-user score store, computes an adaptive per-dimension progress plan via progress-coach, compiles an overall guide via prompt-example-curator (embedding the current focus), then refreshes machine-readable asset suggestions via asset-suggester. Triggers include "review my prompt journal", "run the prompt pipeline", "analyse today's prompts", "analyse all my prompts", "score this log and update my guide", and the /analyse and /prompt-review commands.
 ---
 
 # Prompt Journal Pipeline
 
 Orchestrates the loop: **recorded log(s) → prompt-critic scoring → per-file review + score store
-→ prompt-example-curator (compiled overall guide) → asset-suggester (machine-readable
-candidates)**. This skill owns the run; the rubric lives in `prompt-critic`, banding/guide logic
-in `prompt-example-curator`, and asset clustering in `asset-suggester` — invoke those, do not
-reimplement them.
+→ progress-coach (adaptive focus + pace) → prompt-example-curator (compiled overall guide,
+embedding the focus) → asset-suggester (machine-readable candidates)**. This skill owns the run;
+the rubric lives in `prompt-critic`, the adaptive-coaching math in `progress-coach`,
+banding/guide logic in `prompt-example-curator`, and asset clustering in `asset-suggester` —
+invoke those, do not reimplement them.
 
 **Analyse everything by default.** With no selector, process the entire journal — every `*.txt`
 across every project and branch. The per-file reviews are the local outcome; the score store is
@@ -34,6 +35,10 @@ the record that lets the guide be a **compiled, grounded** view of the user's re
 ## Workflow
 
 ### Step 1 — Resolve the selection and parse into sessions
+**Resolve `run_id` first** — the ISO timestamp this invocation started; every row this run
+appends shares it. It's the checkpoint unit `progress-coach` compares pace across (a calendar
+date isn't safe — two runs can share a day).
+
 Resolve `selector` to a set of log files (default: every `*.txt` in the journal dir). For
 `--project`/`--branch`, filter files by reading their headers. Parse each entry header:
 
@@ -76,13 +81,17 @@ For each entry invoke **`prompt-critic`** with the prompt, passing all earlier s
 as `session_context` (follow-ups are chain steps — never penalized for brevity), and this entry's
 `assets_used` (empty array if the block was absent). Collect each JSON result with its source
 file, project, root, branch, timestamp, `prompt_kind`, `asset_hint`, and `execution_context`.
+Also collapse its `layer1_design`+`layer2_evaluability` arrays into a compact `dims` map
+(`{"D1":"met",...}`, verdict only, drop `na`) — feeds `progress-coach`; evidence stays in the
+per-file review, not duplicated into the store.
 
 ### Step 3 — Append to the score store
-Append one line per result to `<outcomes>/scores/<user>.jsonl` (create if missing): `{date, source,
-project, root, branch, prompt_excerpt, prompt_kind, score, verdict, band, top_dimensions,
-asset_hint, assets_used}`. `assets_used` is the raw list parsed in Step 1 (`[]` if none) — stored
-verbatim so later runs (or a human) can audit what actually ran without re-reading the raw log.
-Append-only — **never rewrite past scores.** Skip entries already scored (match timestamp + prompt).
+Append one line per result to `<outcomes>/scores/<user>.jsonl` (create if missing): `{date,
+run_id, source, project, root, branch, prompt_excerpt, prompt_kind, score, verdict, band,
+top_dimensions, dims, asset_hint, assets_used}` — `run_id`/`dims` from Steps 1–2; `assets_used`
+verbatim from Step 1 (`[]` if none), so later runs can audit what actually ran. Append-only —
+**never rewrite past scores.** Skip entries already scored (timestamp + prompt match). Older
+rows predate `run_id`/`dims`; leave them as-is — `compute-progress.py` degrades gracefully.
 
 ### Step 4 — Write a per-file review (the local outcome)
 For **each processed file**, write `<outcomes>/reviews/<user>/<branch-slug>.md` (overwrite that file's review
@@ -98,22 +107,27 @@ each run). Because a file's prompts are one related session, review them togethe
   a new candidate than intent alone.
 Keep it verbatim-grounded (quote real prompts); do not invent.
 
-### Step 5 — Compile the overall guide (grounded in the whole store)
-Invoke **`prompt-example-curator`** with **all** results for this `user` read from
-`<outcomes>/scores/<user>.jsonl` (not just this run) so the guide's snapshot, strengths, weaknesses,
-and `coverage` (files/projects/date range) reflect the user's **real overall state**. Update
-`<outcomes>/guides/<user>.json`, then render md/pdf/docx (all under `<outcomes>/guides/`). Merge, don't clobber.
+### Step 5 — Compute the adaptive progress plan
+Invoke **`progress-coach`** with `<outcomes>/scores/<user>.jsonl` and, if it exists, the prior
+`<outcomes>/progress/<user>.json` (carries mastery/stall state forward — omit on a first run). It
+writes the updated `progress/<user>.json` + `.md` and returns a teaser (focus + one line + pace)
+for Step 6. Must run after Step 3 (reads the rows just appended), before Step 6.
 
-### Step 6 — Refresh machine-readable asset suggestions
+### Step 6 — Compile the overall guide (grounded in the whole store)
+Invoke **`prompt-example-curator`** with **all** results for this `user` from
+`<outcomes>/scores/<user>.jsonl` (not just this run) so snapshot/strengths/weaknesses/`coverage`
+reflect the **real overall state**, plus Step 5's teaser embedded as "Your Focus Right Now".
+Update `<outcomes>/guides/<user>.json`, render md/pdf/docx. Merge, don't clobber.
+
+### Step 7 — Refresh machine-readable asset suggestions
 Invoke **`asset-suggester`** with this run's results (incl. `asset_hint`s, `project`, `root`) and
-`<outcomes>/scores/<user>.jsonl`. It clusters recurrence across the whole store and records candidates in
-`<outcomes>/suggestions/<user>.json` with `target_project{name,root_path,git_remote,branches}` and
-`grounding{claude_md,rules_dir,code_globs}` so `asset-architect` can later trace the real repo.
-Idempotent — no duplicates.
+`<outcomes>/scores/<user>.jsonl`. It clusters recurrence across the store into
+`<outcomes>/suggestions/<user>.json` with `target_project{...}`/`grounding{...}` so
+`asset-architect` can trace the real repo later. Idempotent — no duplicates.
 
-### Step 7 — Report
-Summarize: files processed (and the selector used), entries scored, per-file reviews written,
-store lines added, overall guide snapshot deltas, and new/updated asset suggestions.
+### Step 8 — Report
+Summarize: files/entries processed, reviews written, current focus + pace (or "provisional" on a
+cold start) + regression alerts, guide snapshot deltas, and new/updated asset suggestions.
 
 ## Constraints
 
@@ -133,6 +147,10 @@ store lines added, overall guide snapshot deltas, and new/updated asset suggesti
 - ALWAYS append to the score store; never overwrite or reorder prior entries.
 - Per-file reviews are the local outcome; the guide is the **compiled overall** view — keep it
   grounded in the full store, never in a single run.
-- Delegate scoring to `prompt-critic`, banding/guide to `prompt-example-curator`, asset clustering
-  to `asset-suggester`; keep rubric, bands, guide format, and suggestion schema consistent.
+- Delegate scoring to `prompt-critic`, adaptive focus/pace to `progress-coach`, banding/guide to
+  `prompt-example-curator`, asset clustering to `asset-suggester`; keep rubric, bands, guide
+  format, progress schema, and suggestion schema consistent.
+- NEVER hand-edit `<outcomes>/progress/<user>.json` — it carries mastery hysteresis and stall
+  counters forward run to run; a manual edit desyncs the adaptive state exactly like editing the
+  score store would.
 - Keep the pipeline idempotent — re-running must not double-count entries or duplicate suggestions.

@@ -1,6 +1,6 @@
 ---
 name: prompt-example-curator
-description: Use after prompt-critic has scored one or more prompts, when the user wants to classify prompts as bad / good / excellent and turn the best and worst into worked examples in their personal prompting guide. Reads prompt-critic JSON output (or a score store), assigns each prompt a band, selects the most instructive real examples per band, extracts durable guidance from recurring gaps, and updates the per-user guide (guides/<user>.md) with before/after examples and habits to build. Triggers include "curate prompt examples", "rate these prompts as bad/good/excellent", "update my prompting guide", "build the guide from these reviews", "add examples to the guide".
+description: Use after prompt-critic has scored one or more prompts, when the user wants to classify prompts as bad / good / excellent and turn the best and worst into worked examples in their personal prompting guide. Reads prompt-critic JSON output (or a score store), assigns each prompt a band, selects the most instructive real examples per band, extracts durable guidance from recurring gaps, embeds progress-coach's current-focus teaser if supplied, and updates the per-user guide (guides/<user>.md) with before/after examples and habits to build. Triggers include "curate prompt examples", "rate these prompts as bad/good/excellent", "update my prompting guide", "build the guide from these reviews", "add examples to the guide".
 ---
 
 # Prompt Example Curator
@@ -31,6 +31,9 @@ read `<outcomes>/scores/<user>.jsonl`, write `<outcomes>/guides/<user>.{json,md,
 - `user` (required): whose guide to update — e.g. `waqar.aziz`. Determines the guide path
   `guides/<user>.md`.
 - `focus` (optional): a dimension (D1–D10 / E1–E4) or theme to emphasize this pass.
+- `focus_teaser` (optional): `progress-coach`'s returned `{dimension, one_line, pace,
+  regression_count}` from this run — embed verbatim as `focus_plan` (see `guide-format.md`);
+  never derive this yourself. Omit `focus_plan` entirely if not supplied.
 
 ## Workflow
 
@@ -54,7 +57,9 @@ Generalize — these are habits the user applies before sending, not per-prompt 
 
 ### Step 4 — Update the per-user guide (structured source, then views)
 Write the structured guide to `<outcomes>/guides/<user>.json` (the **source of truth** — schema in
-`references/guide-format.md`: snapshot, banded sections, habits). For **every** example,
+`references/guide-format.md`: snapshot, `focus_plan`, banded sections, habits). If `focus_teaser`
+was supplied, write it verbatim as `focus_plan`; otherwise omit that key entirely — never invent
+a focus yourself, that's `progress-coach`'s job. For **every** example,
 carry two tables from the prompt-critic result:
 - a full **14-row `rubric`** (D1–D10 then E1–E4, each `met`/`partial`/`gap`/`na` with
   evidence) — this shows *on which grounds* the prompt was reviewed and which best
@@ -76,6 +81,7 @@ to the guide.
 
 - NEVER fabricate or paraphrase a prompt used as an example — quote the user's real prompt verbatim, with source and date.
 - NEVER re-score or override prompt-critic; if a result looks wrong, flag it, don't silently change the band.
+- NEVER compute or invent a `focus_plan` — embed `progress-coach`'s teaser verbatim, or omit the key.
 - ALWAYS pair every `bad` example with a concrete improved version (the critic's `refined_prompt`).
 - ALWAYS give every example a full 14-row `rubric` and a `transformation` table (each gap → before/after + principle); the rubric's weighted roll-up must reproduce the stored score (the renderer warns otherwise).
 - ALWAYS treat short, context-assuming chain steps fairly — a terse turn can be an `excellent` example; label it as a chain step and explain why it worked.

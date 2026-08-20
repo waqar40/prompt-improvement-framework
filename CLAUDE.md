@@ -114,21 +114,36 @@ they connect (see `README.md` for the end-to-end walkthrough):
 2. **Scoring store** — the review persists each prompt's score so improvement is
    trackable over time (per user, per criterion, dated). Convention: `<outcomes>/scores/<user>.jsonl`,
    append-only, one prompt-critic result per line (with prompt excerpt, source log/branch,
-   **project + root** (from the log header), date, score, verdict, band, and `assets_used` — the
+   **project + root** (from the log header), date, `run_id` (the `/analyse` invocation's
+   timestamp — the checkpoint unit progress tracking compares pace across), score, verdict, band,
+   a compact `dims` map (`{"D1":"met",...}`, feeds `progress-coach`), and `assets_used` — the
    parsed `assets-used` block, `[]` if the entry had none). `assets_used` is stored for audit
    trail and passed to `prompt-critic` as grading **context only** — it never adds a scored
-   dimension (see `skills/prompt-critic/references/rubric.md`). Never rewrite past
-   scores to make a trend look better. This store is what lets the guide be a **compiled,
-   overall** view grounded in the user's whole real history.
+   dimension (see `skills/prompt-critic/references/rubric.md`). `run_id`/`dims` are additive —
+   older rows predate them and are read as legacy (cold-start for progress purposes only). Never
+   rewrite past scores to make a trend look better. This store is what lets the guide be a
+   **compiled, overall** view grounded in the user's whole real history.
 2b. **Per-file reviews** — `<outcomes>/reviews/<user>/<branch-slug>.md`: one review per log (a
    related session), written by the pipeline. Because a file's prompts are related, the review rolls
    up that session's strengths/weaknesses and calls out **asset opportunities**
    (skill/agent/hook/…) with the `<outcomes>/suggestions/<user>.json` candidate id to build.
+2c. **Progress coach** — the **`progress-coach`** skill (`skills/progress-coach/`), the adaptive
+   layer. `scripts/compute-progress.py` (deterministic, no LLM call — see
+   `docs/adr/0001-adaptive-personalized-progress-coaching.md`) reads the score store's per-prompt
+   `dims` verdicts, keeps an EWMA-smoothed, confidence-weighted level per rubric dimension, and
+   compares it against the **prior `/analyse` run's checkpoint** to classify pace
+   (`improving_fast/slow`, `flat`, `regressing`) and mastery (Bloom-floor + hysteresis gating).
+   Picks **one** next-focus dimension (Theory-of-Constraints bottleneck rule — never more than
+   one at a time) and flags any previously-mastered dimension now slipping as a **regression
+   alert**, independent of the focus. The skill then authors the plain-English rationale +
+   concrete steps (from `references/dimension-playbooks.md`, never improvised) and writes
+   `<outcomes>/progress/<user>.json` + `.md`. Its own prior output is its only state — **never
+   hand-edit it**, same rule as the score store.
 3. **Example curator** — the **`prompt-example-curator`** skill at
    `skills/prompt-example-curator/`. Reads prompt-critic output (or the score
    store), bands each prompt **bad / good / excellent**, picks the most instructive real
-   examples per band, and writes them — verbatim, with before→after rewrites — into the
-   per-user guide, along with the habits to build.
+   examples per band, embeds `progress-coach`'s current-focus teaser, and writes them —
+   verbatim, with before→after rewrites — into the per-user guide, along with the habits to build.
 4. **Per-user guide** — `<outcomes>/guides/<user>.md`: the evolving, personalised output — what this
    user does well, their recurring gaps, and the habits to build, illustrated with their
    own before/after prompts. Format is fixed in
@@ -207,7 +222,7 @@ specify (a dangling reference, an invalid frontmatter key) route to **`/fix-asse
 directories it created itself** (a `mktemp -d` sandbox, a self-test temp dir). It NEVER deletes
 user data or anything outside its own scratch — not the journal (`~/.claude/prompt-journal/prompts`),
 not the outcomes dir (`~/.claude/prompt-journal/prompts-review-outcomes`:
-scores/guides/suggestions/reviews), not settings. The recorder
+scores/guides/suggestions/reviews/progress), not settings. The recorder
 is **append-only** (it never edits or removes existing logs; on a `task-notification`/bad payload it
 simply exits 0 without writing). Directory setup only ever **creates** (`mkdir -p` / `New-Item
 -Force`), never removes. Any genuinely data-destructive change (deleting logs, resetting a store,

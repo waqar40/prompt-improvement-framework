@@ -454,6 +454,19 @@ def render_md(g: dict, out: Path) -> None:
         span = f"{cov.get('from', '?')} → {cov.get('to', '?')}"
         L.append(f"- Coverage: {cov.get('files', '?')} files across projects [{_mdcell(projects)}] ({span})")
     L.append("")
+
+    fp = g.get("focus_plan")
+    if fp and fp.get("dimension"):
+        L.append("## Your Focus Right Now")
+        tag = " (provisional — still building a baseline)" if fp.get("provisional") else ""
+        L.append(f"- **{fp['dimension']} {_mdcell(fp.get('label',''))}**{tag}: {_mdcell(fp.get('one_line',''))}")
+        L.append(f"- Pace: {fp.get('pace', 'insufficient_data')}")
+        rc = fp.get("regression_count", 0) or 0
+        if rc:
+            L.append(f"- ⚠️ {rc} dimension(s) slipping — see `progress/{g['user']}.md` for detail")
+        L.append(f"- Full per-dimension plan: `progress/{g['user']}.md`")
+        L.append("")
+
     L.append("_Each prompt below has a **rubric scorecard** (Met / Partial / Missing / n-a per "
              "dimension; the score is the weighted roll-up of the applicable rows) and a "
              "**transformation table** (each gap -> a concrete rewrite + the principle it teaches)._")
