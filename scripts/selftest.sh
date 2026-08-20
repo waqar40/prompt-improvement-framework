@@ -4,7 +4,7 @@
 # your real ~/.claude/settings.json, the sibling prompts/ journal, or scores/guides/suggestions.
 # Covers the parts that don't need the LLM: the recorder, the configurator, the header parser, and
 # the guide renderer. The agent-driven skills/commands are exercised by the /test play (see
-# .claude/skills/test-framework/SKILL.md), which runs this script as its first step.
+# skills/test-framework/SKILL.md), which runs this script as its first step.
 #
 #   bash scripts/selftest.sh
 #
@@ -64,28 +64,101 @@ if [ -n "$PS_EXE" ]; then
 else skip "no pwsh/powershell — recorder.ps1 parity"; fi
 
 # ---------------------------------------------------------------------------------------------
+section "record-tool-use.sh + record-turn-end.sh — asset-use capture pipeline"
+# Isolate the buffer dir (normally $TMPDIR/prompt-journal-turn) inside the sandbox so this
+# section can never collide with — or leak into — a real session's buffer.
+OLD_TMPDIR="${TMPDIR:-}"
+export TMPDIR="$SB/hooktmp"; mkdir -p "$TMPDIR"
+REPO_SIM="$SB/repo-sim"; mkdir -p "$REPO_SIM/.claude/skills/prompt-critic"
+echo "fake skill" > "$REPO_SIM/.claude/skills/prompt-critic/SKILL.md"
+J7="$SB/j7"
+
+# (1) normal turn: prompt -> Skill + Edit + unresolved Task -> Stop flushes a deduped block
+SIDA="selftest-sessA"
+printf '{"prompt":"fix bug","cwd":"%s","session_id":"%s"}' "$REPO_SIM" "$SIDA" | PROMPT_JOURNAL_DIR="$J7" bash "$REPO/scripts/record-prompt.sh"
+printf '{"session_id":"%s","tool_name":"Skill","tool_input":{"skill":"prompt-critic"}}' "$SIDA" | CLAUDE_PROJECT_DIR="$REPO_SIM" bash "$REPO/scripts/record-tool-use.sh"
+printf '{"session_id":"%s","tool_name":"Edit","tool_input":{"file_path":"%s/src/foo.py"}}' "$SIDA" "$REPO_SIM" | CLAUDE_PROJECT_DIR="$REPO_SIM" bash "$REPO/scripts/record-tool-use.sh"
+printf '{"session_id":"%s","tool_name":"Task","tool_input":{"subagent_type":"code-reviewer"}}' "$SIDA" | CLAUDE_PROJECT_DIR="$REPO_SIM" bash "$REPO/scripts/record-tool-use.sh"
+printf '{"session_id":"%s","tool_name":"Bash","tool_input":{"command":"echo hi"}}' "$SIDA" | CLAUDE_PROJECT_DIR="$REPO_SIM" bash "$REPO/scripts/record-tool-use.sh"   # must be ignored (not in the whitelist)
+printf '{"session_id":"%s"}' "$SIDA" | bash "$REPO/scripts/record-turn-end.sh"
+fileA="$(ls "$J7"/*.txt 2>/dev/null | head -1)"
+if [ -n "$fileA" ]; then
+  grep -q "^----- assets-used -----$" "$fileA"          && pass "assets-used block appended"              || fail "no assets-used block in $fileA"
+  grep -q "^skill: prompt-critic ->.*SKILL.md$" "$fileA" && pass "resolved skill path recorded"            || fail "skill line missing/unresolved: $(cat "$fileA")"
+  grep -q "^tool: Edit ->.*src/foo.py$" "$fileA"          && pass "Edit file path recorded"                 || fail "Edit line missing: $(cat "$fileA")"
+  grep -q "^subagent: code-reviewer -> (unresolved)$" "$fileA" && pass "unresolvable subagent path -> (unresolved)" || fail "subagent line wrong: $(cat "$fileA")"
+  grep -q "echo hi" "$fileA"                              && fail "Bash call leaked into assets-used (must be filtered)" || pass "non-whitelisted tool (Bash) correctly excluded"
+else
+  fail "no journal file written for case (1)"
+fi
+
+# (2) a turn with no trackable tool use -> Stop must add nothing
+SIDB="selftest-sessB"
+printf '{"prompt":"hi","cwd":"%s","session_id":"%s"}' "$REPO_SIM" "$SIDB" | PROMPT_JOURNAL_DIR="$J7" bash "$REPO/scripts/record-prompt.sh"
+before="$(grep -c "assets-used" "$fileA" 2>/dev/null || echo 0)"
+printf '{"session_id":"%s"}' "$SIDB" | bash "$REPO/scripts/record-turn-end.sh"
+after="$(grep -c "assets-used" "$fileA" 2>/dev/null || echo 0)"
+[ "$before" = "$after" ] && pass "no-tool-use turn adds no assets-used block" || fail "unexpected assets-used growth ($before -> $after)"
+
+# (3) a skipped (task-notification) prompt writes no marker; a stray tool event must not leak
+SIDC="selftest-sessC"
+printf '{"prompt":"<task-notification>done</task-notification>","cwd":"%s","session_id":"%s"}' "$REPO_SIM" "$SIDC" | PROMPT_JOURNAL_DIR="$J7" bash "$REPO/scripts/record-prompt.sh"
+[ -f "$TMPDIR/prompt-journal-turn/$SIDC.journal" ] && fail "marker written for a skipped (task-notification) prompt" || pass "no marker written for a skipped prompt"
+printf '{"session_id":"%s","tool_name":"Edit","tool_input":{"file_path":"/orphan/y.py"}}' "$SIDC" | bash "$REPO/scripts/record-tool-use.sh"
+printf '{"session_id":"%s"}' "$SIDC" | bash "$REPO/scripts/record-turn-end.sh"
+grep -rl "orphan/y.py" "$J7" >/dev/null 2>&1 && fail "orphaned tool call leaked into a journal file" || pass "orphaned tool call discarded without leaking"
+
+# (4) buffer dir is empty after all three turns (marker + tools files always cleaned up)
+leftover="$(ls -A "$TMPDIR/prompt-journal-turn" 2>/dev/null)"
+[ -z "$leftover" ] && pass "buffer dir fully cleaned up after each turn" || fail "buffer dir has leftovers: $leftover"
+
+# (5) PowerShell parity, if available
+if [ -n "$PS_EXE" ]; then
+  SIDD="selftest-sessD"
+  printf '{"prompt":"ps fix bug","cwd":"%s","session_id":"%s"}' "$REPO" "$SIDD" | PROMPT_JOURNAL_DIR="$J7" "$PS_EXE" -NoProfile -File "$REPO/scripts/record-prompt.ps1"
+  printf '{"session_id":"%s","tool_name":"Edit","tool_input":{"file_path":"%s/x.py"}}' "$SIDD" "$REPO" | "$PS_EXE" -NoProfile -File "$REPO/scripts/record-tool-use.ps1"
+  printf '{"session_id":"%s"}' "$SIDD" | "$PS_EXE" -NoProfile -File "$REPO/scripts/record-turn-end.ps1"
+  fileD="$(ls "$J7"/*.txt 2>/dev/null | xargs grep -l "ps fix bug" 2>/dev/null | head -1)"
+  [ -n "$fileD" ] && grep -q "^tool: Edit ->.*x.py$" "$fileD" && pass "ps1 asset-use pipeline appends assets-used block" || fail "ps1 asset-use pipeline did not append a block"
+else
+  skip "no pwsh/powershell — record-tool-use.ps1/record-turn-end.ps1 parity"
+fi
+
+if [ -n "$OLD_TMPDIR" ]; then export TMPDIR="$OLD_TMPDIR"; else unset TMPDIR; fi
+
+# ---------------------------------------------------------------------------------------------
 section "configure.sh — idempotency, stale removal, preservation, self-test"
 if [ "$HAVE_PY" -eq 1 ]; then
   S="$SB/settings.json"
+  # Isolate configure.sh's own dir side effects (journal + outcomes) inside the sandbox — it
+  # otherwise defaults to ~/.claude/prompt-journal/*, which must never be touched by a self-test.
+  CFG_JOURNAL="$SB/cfg-journal"
+  export PROMPT_OUTCOMES_DIR="$SB/cfg-outcomes"
   cat > "$S" <<'JSON'
 { "model": "opus", "hooks": { "UserPromptSubmit": [
   { "hooks": [ { "type": "command", "command": "pwsh -File C:/old/log-prompt.ps1" } ] },
   { "hooks": [ { "type": "command", "command": "echo keep-me" } ] }
 ] } }
 JSON
-  out1="$(bash "$REPO/scripts/configure.sh" --settings "$S" 2>&1)"
+  out1="$(bash "$REPO/scripts/configure.sh" --settings "$S" --journal "$CFG_JOURNAL" 2>&1)"
   echo "$out1" | grep -q "Self-test passed" && pass "configure self-test passed" || fail "configure self-test did not pass"
-  bash "$REPO/scripts/configure.sh" --settings "$S" >/dev/null 2>&1   # second run -> must dedupe
+  bash "$REPO/scripts/configure.sh" --settings "$S" --journal "$CFG_JOURNAL" >/dev/null 2>&1   # second run -> must dedupe
   py="$(cat "$S" | python3 -c "
 import json,sys
-s=json.load(sys.stdin); ups=s['hooks']['UserPromptSubmit']
-rec=sum(1 for g in ups if any('record-prompt' in h['command'] for h in g['hooks']))
-keep=sum(1 for g in ups if any('keep-me' in h['command'] for h in g['hooks']))
-print(f'{rec} {keep} {s.get(\"model\")}')")"
+s=json.load(sys.stdin); h=s['hooks']
+rec=sum(1 for g in h.get('UserPromptSubmit',[]) if any('record-prompt' in x['command'] for x in g['hooks']))
+keep=sum(1 for g in h.get('UserPromptSubmit',[]) if any('keep-me' in x['command'] for x in g['hooks']))
+tool=sum(1 for g in h.get('PostToolUse',[])     if any('record-tool-use' in x['command'] for x in g['hooks']))
+stop=sum(1 for g in h.get('Stop',[])            if any('record-turn-end' in x['command'] for x in g['hooks']))
+matcher=h.get('PostToolUse',[{}])[0].get('matcher','') if h.get('PostToolUse') else ''
+print(f'{rec} {keep} {s.get(\"model\")} {tool} {stop} {matcher}')")"
   set -- $py
   [ "$1" = "1" ]     && pass "idempotent: exactly 1 recorder hook after 2 runs" || fail "recorder hook count = $1 (want 1)"
   [ "$2" = "1" ]     && pass "preserved unrelated hook (keep-me)"                || fail "unrelated hook lost"
   [ "$3" = "opus" ]  && pass "preserved unrelated key (model)"                   || fail "model key lost"
+  [ "$4" = "1" ]     && pass "idempotent: exactly 1 PostToolUse recorder hook after 2 runs" || fail "PostToolUse hook count = $4 (want 1)"
+  [ "$5" = "1" ]     && pass "idempotent: exactly 1 Stop recorder hook after 2 runs"        || fail "Stop hook count = $5 (want 1)"
+  [ "$6" = "Skill|Task|Read|Edit|Write|NotebookEdit" ] && pass "PostToolUse matcher scoped to asset-invocation tools" || fail "PostToolUse matcher wrong: $6"
   # --journal bakes the path into the hook command
   bash "$REPO/scripts/configure.sh" --settings "$S" --journal "$SB/custom-j" >/dev/null 2>&1
   cat "$S" | python3 -c "
@@ -99,7 +172,8 @@ else skip "no python3 — configure.sh JSON assertions"; fi
 section "configure.sh — guide-rendering deps are best-effort, never blocking"
 if [ "$HAVE_PY" -eq 1 ]; then
   S2="$SB/settings-deps.json"
-  out2="$(bash "$REPO/scripts/configure.sh" --settings "$S2" 2>&1)"
+  export PROMPT_OUTCOMES_DIR="$SB/cfg-outcomes2"
+  out2="$(bash "$REPO/scripts/configure.sh" --settings "$S2" --journal "$SB/cfg-journal2" 2>&1)"
   echo "$out2" | grep -qE "^\[(OK|FIXED)\][[:space:]]+Guide PDF/Word deps|^\[FIXED\][[:space:]]+Installed pinned guide-rendering deps|^\[OPTIONAL\][[:space:]]+PDF/Word guide views need" \
     && pass "configure.sh reports guide-deps status as OK/FIXED/OPTIONAL" \
     || fail "configure.sh did not report a guide-deps status line: $out2"
@@ -107,6 +181,7 @@ if [ "$HAVE_PY" -eq 1 ]; then
     && fail "guide-rendering deps must never surface as a blocking [ACTION]" \
     || pass "guide-rendering deps never block configure (no [ACTION] for them)"
 else skip "no python3 — configure.sh guide-deps assertions"; fi
+unset PROMPT_OUTCOMES_DIR   # don't leak the sandbox override into later sections of this script
 
 # ---------------------------------------------------------------------------------------------
 section "scripts/requirements.txt — reportlab pinned below 4.2 (Python 3.8 hashlib compat)"
@@ -144,6 +219,42 @@ for p in pathlib.Path(sys.argv[1]).glob('*.txt'):
 assert n>=4, f"expected >=4 fixture headers, saw {n}"
 PY
 else skip "no python3 — header parser check"; fi
+
+# ---------------------------------------------------------------------------------------------
+section "header parser — assets-used block is split from the scored prompt text"
+if [ "$HAVE_PY" -eq 1 ]; then
+  python3 - "$FIX/logs/feature-DEMO-1_alpha.txt" <<'PY' && pass "assets-used block correctly split from prompt text" || fail "assets-used splitting broke"
+import re, sys, pathlib
+
+text = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+header_rx = re.compile(r'^===== \[.*?\] branch=\S+(?: project=\S+)?(?: root=.+?)? =====$')
+entries = re.split(r'(?m)^(===== .*? =====)$', text)[1:]   # alternating [header, body, header, body, ...]
+bodies = [entries[i+1] for i in range(0, len(entries), 2)]
+
+def split_assets(body):
+    m = re.search(r'\n-{5} assets-used -{5}\n(.*?)\n-{5} end-assets-used -{5}\n', body, re.S)
+    if not m:
+        return body.strip(), []
+    prompt_text = body[:m.start()].strip()
+    lines = [l for l in m.group(1).splitlines() if l.strip()]
+    return prompt_text, lines
+
+with_block    = [b for b in bodies if 'assets-used' in b]
+without_block = [b for b in bodies if 'assets-used' not in b]
+assert len(with_block) == 2, f"expected 2 entries with an assets-used block, saw {len(with_block)}"
+assert len(without_block) >= 1, "expected at least 1 entry with no assets-used block (the common case)"
+
+prompt_text, assets = split_assets(with_block[1])   # the "now push it" entry
+assert prompt_text == "now push it", f"prompt text not cleanly split: {prompt_text!r}"
+assert assets == ["skill: commit-message -> skills/commit-message/SKILL.md"], f"assets lines wrong: {assets}"
+assert "-----" not in prompt_text, "delimiter leaked into scored prompt text"
+
+# an entry with no block must still parse with an empty assets list and untouched prompt text
+prompt_text2, assets2 = split_assets(without_block[0])
+assert assets2 == [], f"expected no assets for a block-less entry, got {assets2}"
+assert prompt_text2, "prompt text must not be empty for a block-less entry"
+PY
+else skip "no python3 — assets-used splitting check"; fi
 
 # ---------------------------------------------------------------------------------------------
 section "render-guide.py — Markdown view incl. coverage line"

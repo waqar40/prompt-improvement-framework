@@ -1,9 +1,9 @@
-# Data lives OUTSIDE the repo by default — the framework repo is machinery only.
-#   INPUT  (raw prompt logs): a sibling 'prompts/' folder            (PROMPT_JOURNAL_DIR override)
-#   OUTPUT (scores/guides/suggestions/reviews): a sibling
-#          'prompts-review-outcomes/' folder                          (PROMPT_OUTCOMES_DIR override)
+# Data lives OUTSIDE the repo by default — the plugin itself is machinery only.
+#   INPUT  (raw prompt logs): ~/.claude/prompt-journal/prompts/            (PROMPT_JOURNAL_DIR override)
+#   OUTPUT (scores/guides/suggestions/reviews): ~/.claude/prompt-journal/prompts-review-outcomes/
+#                                                                            (PROMPT_OUTCOMES_DIR override)
 # These entries only matter if someone overrides a location to a path inside the repo — keep
-# personal data out of the shareable framework either way.
+# personal data out of the shareable plugin either way.
 /prompts/
 /logs/
 /prompts-review-outcomes/
