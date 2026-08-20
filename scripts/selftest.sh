@@ -79,6 +79,7 @@ printf '{"prompt":"fix bug","cwd":"%s","session_id":"%s"}' "$REPO_SIM" "$SIDA" |
 printf '{"session_id":"%s","tool_name":"Skill","tool_input":{"skill":"prompt-critic"}}' "$SIDA" | CLAUDE_PROJECT_DIR="$REPO_SIM" bash "$REPO/scripts/record-tool-use.sh"
 printf '{"session_id":"%s","tool_name":"Edit","tool_input":{"file_path":"%s/src/foo.py"}}' "$SIDA" "$REPO_SIM" | CLAUDE_PROJECT_DIR="$REPO_SIM" bash "$REPO/scripts/record-tool-use.sh"
 printf '{"session_id":"%s","tool_name":"Task","tool_input":{"subagent_type":"code-reviewer"}}' "$SIDA" | CLAUDE_PROJECT_DIR="$REPO_SIM" bash "$REPO/scripts/record-tool-use.sh"
+printf '{"session_id":"%s","tool_name":"mcp__github__create_pull_request","tool_input":{}}' "$SIDA" | CLAUDE_PROJECT_DIR="$REPO_SIM" bash "$REPO/scripts/record-tool-use.sh"
 printf '{"session_id":"%s","tool_name":"Bash","tool_input":{"command":"echo hi"}}' "$SIDA" | CLAUDE_PROJECT_DIR="$REPO_SIM" bash "$REPO/scripts/record-tool-use.sh"   # must be ignored (not in the whitelist)
 printf '{"session_id":"%s"}' "$SIDA" | bash "$REPO/scripts/record-turn-end.sh"
 fileA="$(ls "$J7"/*.txt 2>/dev/null | head -1)"
@@ -87,6 +88,7 @@ if [ -n "$fileA" ]; then
   grep -q "^skill: prompt-critic ->.*SKILL.md$" "$fileA" && pass "resolved skill path recorded"            || fail "skill line missing/unresolved: $(cat "$fileA")"
   grep -q "^tool: Edit ->.*src/foo.py$" "$fileA"          && pass "Edit file path recorded"                 || fail "Edit line missing: $(cat "$fileA")"
   grep -q "^subagent: code-reviewer -> (unresolved)$" "$fileA" && pass "unresolvable subagent path -> (unresolved)" || fail "subagent line wrong: $(cat "$fileA")"
+  grep -q "^mcp: mcp__github__create_pull_request -> (unresolved)$" "$fileA" && pass "MCP tool call recorded" || fail "mcp line missing/wrong: $(cat "$fileA")"
   grep -q "echo hi" "$fileA"                              && fail "Bash call leaked into assets-used (must be filtered)" || pass "non-whitelisted tool (Bash) correctly excluded"
 else
   fail "no journal file written for case (1)"
@@ -158,7 +160,7 @@ print(f'{rec} {keep} {s.get(\"model\")} {tool} {stop} {matcher}')")"
   [ "$3" = "opus" ]  && pass "preserved unrelated key (model)"                   || fail "model key lost"
   [ "$4" = "1" ]     && pass "idempotent: exactly 1 PostToolUse recorder hook after 2 runs" || fail "PostToolUse hook count = $4 (want 1)"
   [ "$5" = "1" ]     && pass "idempotent: exactly 1 Stop recorder hook after 2 runs"        || fail "Stop hook count = $5 (want 1)"
-  [ "$6" = "Skill|Task|Read|Edit|Write|NotebookEdit" ] && pass "PostToolUse matcher scoped to asset-invocation tools" || fail "PostToolUse matcher wrong: $6"
+  [ "$6" = "Skill|Task|Read|Edit|Write|NotebookEdit|mcp__.*" ] && pass "PostToolUse matcher scoped to asset-invocation tools (incl. MCP)" || fail "PostToolUse matcher wrong: $6"
   # --journal bakes the path into the hook command
   bash "$REPO/scripts/configure.sh" --settings "$S" --journal "$SB/custom-j" >/dev/null 2>&1
   cat "$S" | python3 -c "

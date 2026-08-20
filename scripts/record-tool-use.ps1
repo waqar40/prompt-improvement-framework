@@ -1,9 +1,9 @@
 # ai-gen — Claude Code PostToolUse hook: buffers asset invocations (Skill/Task/file-touching
-# tools) for the current turn, keyed by session_id, so record-turn-end.ps1 (the Stop hook) can
-# attach a summary to the journal entry record-prompt.ps1 wrote for this turn's prompt.
-# hooks/hooks.json scopes this hook to Skill|Task|Read|Edit|Write|NotebookEdit via its matcher,
-# so it only runs for tool calls worth recording. Best-effort and silent: never blocks a tool
-# call, exits 0 on any error.
+# tools/MCP tool calls) for the current turn, keyed by session_id, so record-turn-end.ps1 (the
+# Stop hook) can attach a summary to the journal entry record-prompt.ps1 wrote for this turn's
+# prompt. hooks/hooks.json scopes this hook to
+# Skill|Task|Read|Edit|Write|NotebookEdit|mcp__.* via its matcher, so it only runs for tool
+# calls worth recording. Best-effort and silent: never blocks a tool call, exits 0 on any error.
 $ErrorActionPreference = 'Stop'
 
 $raw = [Console]::In.ReadToEnd()
@@ -55,7 +55,14 @@ switch ($toolName) {
         $path = [string]$data.tool_input.file_path
         Write-BufferLine 'tool' $toolName $path
     }
-    default { }   # hooks.json's matcher already restricts events to the cases above
+    default {
+        if ($toolName -like 'mcp__*') {
+            # No file-path concept for most MCP calls; record the full tool name (e.g.
+            # mcp__github__create_pull_request) as the name — that's the useful identifier here.
+            Write-BufferLine 'mcp' $toolName ''
+        }
+        # else: hooks.json's matcher already restricts events to the cases above
+    }
 }
 
 exit 0

@@ -60,11 +60,13 @@ linter, and it is not a git working tree. Do not look for or invent build/run co
   ```
 - **An entry may end with an optional `assets-used` block** — machine-written by the
   `PostToolUse`/`Stop` hooks (`scripts/record-tool-use.*` / `scripts/record-turn-end.*`),
-  recording which skills/subagents/tools actually ran as a result of that prompt, with paths:
+  recording which skills/subagents/tools/MCP tool calls actually ran as a result of that
+  prompt, with paths (MCP calls have no path — `(unresolved)`):
   ```
   ----- assets-used -----
   skill: prompt-critic -> skills/prompt-critic/SKILL.md
   tool: Edit -> /abs/path/to/file.py
+  mcp: mcp__github__create_pull_request -> (unresolved)
   ----- end-assets-used -----
   ```
   It's absent on most entries (turns with no trackable tool use, and all logs predating this
@@ -90,10 +92,11 @@ they connect (see `README.md` for the end-to-end walkthrough):
      beginning `<task-notification>`) so agent notifications never land in the journal as if they
      were authored prompts. On a successful write it also drops a per-session marker (in a temp
      dir, keyed by `session_id`) naming the file it just wrote, for the next hook to find.
-   - `scripts/record-tool-use.{ps1,sh}` (`PostToolUse`, matcher `Skill|Task|Read|Edit|Write|NotebookEdit`)
-     buffers each relevant tool call (skill/subagent name + resolved path, or file path touched)
-     to that same per-session temp buffer. Never logs Bash/Grep/Glob/etc. — asset invocations
-     only, by design.
+   - `scripts/record-tool-use.{ps1,sh}` (`PostToolUse`, matcher
+     `Skill|Task|Read|Edit|Write|NotebookEdit|mcp__.*`) buffers each relevant tool call
+     (skill/subagent name + resolved path, file path touched, or MCP tool name — MCP calls
+     have no path, recorded as `(unresolved)`) to that same per-session temp buffer. Never
+     logs Bash/Grep/Glob/etc. — asset invocations only, by design.
    - `scripts/record-turn-end.{ps1,sh}` (`Stop`) flushes the buffer into the `assets-used` block
      (see File taxonomy above) appended to the marker's journal file, then deletes the marker +
      buffer. Writes nothing if no marker exists (prompt was skipped) or the buffer is empty (no

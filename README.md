@@ -305,8 +305,9 @@ named after the current context, resolved in this order (slashes become hyphens 
 Slash commands (`/build`, `/init`) are recorded too.
 
 **What ran gets recorded alongside what you typed.** Once Claude finishes responding, if it
-invoked any skills, subagents, or Read/Edit/Write/NotebookEdit tools, an `assets-used` block
-(name + resolved path for each) is appended to that same entry — automatically, no action
+invoked any skills, subagents, Read/Edit/Write/NotebookEdit tools, or MCP tool calls (anything
+named `mcp__*`), an `assets-used` block (name + resolved path for each — MCP calls have no
+path, recorded as `(unresolved)`) is appended to that same entry — automatically, no action
 needed. Turns that only used other tools (Bash, Grep, search, …) or no tools at all simply get
 no block; that's normal.
 
@@ -608,7 +609,7 @@ same shape `hooks/hooks.json` declares for a plugin install):
       { "hooks": [ { "type": "command", "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File \"<clone>/scripts/record-prompt.ps1\"", "timeout": 15 } ] }
     ],
     "PostToolUse": [
-      { "matcher": "Skill|Task|Read|Edit|Write|NotebookEdit",
+      { "matcher": "Skill|Task|Read|Edit|Write|NotebookEdit|mcp__.*",
         "hooks": [ { "type": "command", "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File \"<clone>/scripts/record-tool-use.ps1\"", "timeout": 10 } ] }
     ],
     "Stop": [

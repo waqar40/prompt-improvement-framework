@@ -15,7 +15,7 @@ re-run any time).
 
 **As an installed plugin, all three recorder hooks are already active** — `hooks/hooks.json`
 wires `UserPromptSubmit` (`scripts/record-prompt.*`), `PostToolUse` (`scripts/record-tool-use.*`,
-matcher-scoped to `Skill|Task|Read|Edit|Write|NotebookEdit`), and `Stop`
+matcher-scoped to `Skill|Task|Read|Edit|Write|NotebookEdit|mcp__.*`), and `Stop`
 (`scripts/record-turn-end.*`) automatically, no settings.json edit required. By default the
 scripts only: create the journal dir (default
 `~/.claude/prompt-journal/prompts`) and the outcomes dir (default

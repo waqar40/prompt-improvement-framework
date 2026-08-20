@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # ai-gen — Claude Code PostToolUse hook: buffers asset invocations (Skill/Task/file-touching
-# tools) for the current turn, keyed by session_id, so record-turn-end.sh (the Stop hook) can
-# attach a summary to the journal entry record-prompt.sh wrote for this turn's prompt.
-# hooks/hooks.json scopes this hook to Skill|Task|Read|Edit|Write|NotebookEdit via its matcher,
-# so it only runs for tool calls worth recording — never for the high-frequency ones (Bash,
-# Grep, Glob, ...). Best-effort and silent: never blocks a tool call, exits 0 on any error.
+# tools/MCP tool calls) for the current turn, keyed by session_id, so record-turn-end.sh (the
+# Stop hook) can attach a summary to the journal entry record-prompt.sh wrote for this turn's
+# prompt. hooks/hooks.json scopes this hook to Skill|Task|Read|Edit|Write|NotebookEdit|mcp__.*
+# via its matcher, so it only runs for tool calls worth recording — never for the high-frequency
+# ones (Bash, Grep, Glob, ...). Best-effort and silent: never blocks a tool call, exits 0 on any error.
 set -uo pipefail
 
 raw="$(cat)"
@@ -81,6 +81,11 @@ case "$tool_name" in
   Read|Edit|Write|NotebookEdit)
     path="$(read_nested '.tool_input.file_path' "d.get('tool_input',{}).get('file_path','')")"
     write_line tool "$tool_name" "$path"
+    ;;
+  mcp__*)
+    # No file-path concept for most MCP calls; record the full tool name (e.g.
+    # mcp__github__create_pull_request) as "name" — that's the useful identifier here.
+    write_line mcp "$tool_name" ""
     ;;
   *) : ;;   # hooks.json's matcher already restricts events to the cases above; ignore anything else
 esac

@@ -101,7 +101,7 @@ else
 
   # --- Merge all three recorder hooks into settings.json (python3 preferred, jq fallback) -------
   # Registers UserPromptSubmit (records the prompt), PostToolUse (buffers asset invocations —
-  # matcher scopes it to Skill|Task|Read|Edit|Write|NotebookEdit only), and Stop (flushes the
+  # matcher scopes it to Skill|Task|Read|Edit|Write|NotebookEdit|mcp__.* only), and Stop (flushes the
   # buffer into that prompt's assets-used block) — the full asset-use capture pipeline that
   # hooks/hooks.json wires automatically for a plugin install.
   merge_with_python3() {
@@ -143,7 +143,7 @@ removed_total = 0
 removed_total += replace_event(hooks, "UserPromptSubmit", ["record-prompt", "log-prompt"],
     {"hooks": [{"type": "command", "command": os.environ["PROMPT_CMD"], "timeout": 15}]})
 removed_total += replace_event(hooks, "PostToolUse", ["record-tool-use"],
-    {"matcher": "Skill|Task|Read|Edit|Write|NotebookEdit",
+    {"matcher": "Skill|Task|Read|Edit|Write|NotebookEdit|mcp__.*",
      "hooks": [{"type": "command", "command": os.environ["TOOLUSE_CMD"], "timeout": 10}]})
 removed_total += replace_event(hooks, "Stop", ["record-turn-end"],
     {"hooks": [{"type": "command", "command": os.environ["TURNEND_CMD"], "timeout": 10}]})
@@ -176,7 +176,7 @@ PY
       | .hooks.PostToolUse =
           (((.hooks.PostToolUse // [])
             | map(select([.hooks[].command] | any(test("record-tool-use")) | not)))
-           + [{matcher: "Skill|Task|Read|Edit|Write|NotebookEdit",
+           + [{matcher: "Skill|Task|Read|Edit|Write|NotebookEdit|mcp__.*",
                hooks: [{type: "command", command: $tcmd, timeout: 10}]}])
       | .hooks.Stop =
           (((.hooks.Stop // [])
@@ -190,7 +190,7 @@ PY
   if command -v python3 >/dev/null 2>&1; then MERGE_OUT="$(merge_with_python3)" || MERGE_RC=$?
   elif command -v jq >/dev/null 2>&1;    then MERGE_OUT="$(merge_with_jq)"     || MERGE_RC=$?
   else
-    note_action "Cannot edit settings.json automatically (need python3 or jq). Add these hooks by hand to $SETTINGS_PATH: UserPromptSubmit -> {\"type\":\"command\",\"command\":\"$PROMPT_HOOK_COMMAND\",\"timeout\":15}; PostToolUse (matcher \"Skill|Task|Read|Edit|Write|NotebookEdit\") -> {\"type\":\"command\",\"command\":\"$TOOLUSE_HOOK_COMMAND\",\"timeout\":10}; Stop -> {\"type\":\"command\",\"command\":\"$TURNEND_HOOK_COMMAND\",\"timeout\":10}."
+    note_action "Cannot edit settings.json automatically (need python3 or jq). Add these hooks by hand to $SETTINGS_PATH: UserPromptSubmit -> {\"type\":\"command\",\"command\":\"$PROMPT_HOOK_COMMAND\",\"timeout\":15}; PostToolUse (matcher \"Skill|Task|Read|Edit|Write|NotebookEdit|mcp__.*\") -> {\"type\":\"command\",\"command\":\"$TOOLUSE_HOOK_COMMAND\",\"timeout\":10}; Stop -> {\"type\":\"command\",\"command\":\"$TURNEND_HOOK_COMMAND\",\"timeout\":10}."
     MERGE_RC=99
   fi
 

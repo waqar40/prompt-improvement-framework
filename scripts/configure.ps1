@@ -150,7 +150,7 @@ $turnEndHookCommand = '{0} -NoProfile -ExecutionPolicy Bypass -File "{1}"' -f $e
 
 # --- Merge all three recorder hooks idempotently -------------------------------------------------
 # UserPromptSubmit (records the prompt), PostToolUse (buffers asset invocations — matcher scopes
-# it to Skill|Task|Read|Edit|Write|NotebookEdit only), and Stop (flushes the buffer into that
+# it to Skill|Task|Read|Edit|Write|NotebookEdit|mcp__.* only), and Stop (flushes the buffer into that
 # prompt's assets-used block) — the full asset-use capture pipeline hooks/hooks.json wires
 # automatically for a plugin install.
 if (-not $settings.PSObject.Properties['hooks']) { Set-Prop $settings 'hooks' ([pscustomobject]@{}) }
@@ -158,7 +158,7 @@ if (-not $settings.PSObject.Properties['hooks']) { Set-Prop $settings 'hooks' ([
 $removedPrompt = Merge-Event $settings 'UserPromptSubmit' @('record-prompt', 'log-prompt') `
     ([pscustomobject]@{ hooks = @([pscustomobject]@{ type = 'command'; command = $promptHookCommand; timeout = 15 }) })
 $removedTool = Merge-Event $settings 'PostToolUse' @('record-tool-use') `
-    ([pscustomobject]@{ matcher = 'Skill|Task|Read|Edit|Write|NotebookEdit'
+    ([pscustomobject]@{ matcher = 'Skill|Task|Read|Edit|Write|NotebookEdit|mcp__.*'
                          hooks   = @([pscustomobject]@{ type = 'command'; command = $toolUseHookCommand; timeout = 10 }) })
 $removedStop = Merge-Event $settings 'Stop' @('record-turn-end') `
     ([pscustomobject]@{ hooks = @([pscustomobject]@{ type = 'command'; command = $turnEndHookCommand; timeout = 10 }) })
