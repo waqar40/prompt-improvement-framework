@@ -1,13 +1,14 @@
 # Prompt Journal — record, rate, and improve your prompts as a team
 
-A **Claude Code plugin** for getting better at prompting, together. It **records every prompt
-you send to Claude Code**, **scores each one** against a rubric distilled from Anthropic's
-and OpenAI's guidance, and **builds a personal guide** for each teammate with real
-before/after examples and the habits to build.
+**What this is, in one line:** a **Claude Code plugin** that automatically records every
+prompt you send, **grades each one** against a fixed rubric distilled from Anthropic's and
+OpenAI's guidance, and **tells you the one habit to fix next** — turning "I hope my prompts
+are decent" into an actual, trackable feedback loop, for you and your whole team.
 
 The whole point is a feedback loop: one prompt teaches you nothing; a few hundred logged
 and honestly reviewed prompts show you your actual habits — the good ones to keep and the
-lazy ones to kill.
+lazy ones to kill. Everything is automatic except reading the output: install once, work
+normally, and run one command whenever you want your personal guide refreshed.
 
 > **Every `/command` in this README (`/configure`, `/analyse`, `/scaffold-asset`, …) is a
 > Claude Code slash command.** Type it into the Claude Code chat prompt itself — **not**
@@ -79,6 +80,75 @@ Set expectations before you install anything — this is a coaching tool, not ma
 
 ## How it works
 
+You already know some of your prompts land clean on the first try and some need two or three
+follow-up corrections — you just don't know *which habit* is responsible, because nobody is
+counting. The gap between someone who prompts well and someone who doesn't usually isn't talent;
+it's feedback. A good prompter has, through repetition, internalized what "specific enough"
+and "testable success" actually look like in practice. Most people never get that feedback loop,
+because grading your own prompts after the fact is tedious, so nobody does it consistently — and
+without it, the same vague habits just repeat forever. This plugin runs that feedback loop for
+you, automatically, on every prompt, with the same rubric every time — and instead of handing you
+fourteen numbers to interpret yourself, it tells you the **one** habit currently holding you back
+and whether you're actually moving on it.
+
+### The mechanism, in plain English
+
+1. **Every prompt you send is saved automatically**, the instant you send it — no setup step per
+   prompt, nothing to remember to do.
+2. **When you ask for feedback (`/analyse`), each prompt gets graded** against a fixed 14-point
+   checklist — things like "did you say what done looks like" and "did you name the actual
+   action instead of a vague category" — with evidence quoted for every verdict, not just a score.
+3. **Those grades accumulate in your personal history**, so the tool isn't just judging one
+   prompt in isolation — it's watching how each of those 14 habits trends over weeks, not days.
+4. **It picks the single habit most worth fixing right now** — not a top-10 list, one thing —
+   and tells you concretely how to fix it, with your own real prompts as before/after examples.
+5. **It watches for backsliding** in habits you'd already fixed, independently of whatever it's
+   currently coaching you on, so improvement in one area never quietly erodes somewhere else.
+6. **It also notices what you keep asking for by hand** and flags it as something worth turning
+   into a reusable skill, hook, or command instead of re-typing it every time.
+
+### Why it's adaptive, and how it decides what's weak
+
+A one-time grade is a snapshot — useful once, stale immediately. What makes this a *coach* rather
+than a report card is that it keeps a running, per-dimension memory and updates its advice as
+that memory changes:
+
+- **It smooths out noise instead of overreacting to one bad prompt.** Each dimension's "level" is
+  a recency-weighted average (an EWMA — exponentially weighted moving average) of your recent
+  `met`/`partial`/`gap` verdicts on that dimension, so one sloppy prompt on a rushed day doesn't
+  register as a collapse, and one lucky prompt doesn't register as mastery.
+- **It doesn't trust thin evidence.** A dimension with only one or two data points is pulled back
+  toward "unknown" rather than confidently labeled strong or weak — the tool would rather say "not
+  enough signal yet" than overclaim.
+- **It fixes on exactly one weak spot at a time**, using a bottleneck rule borrowed from Theory of
+  Constraints: of everything currently weak, it picks the one dimension that's most limiting your
+  overall prompt quality right now, and stays on it until it's actually resolved — rather than
+  listing every gap and leaving you to guess which to tackle first.
+- **It measures pace, not just level.** Between one `/analyse` run and the next, it classifies
+  each dimension as `improving_fast`, `improving_slow`, `flat`, or `regressing`. If a dimension
+  sits `flat` for several runs in a row, it swaps in a *different* concrete tactic rather than
+  repeating the same advice a third time.
+- **"Mastered" requires consistency, not a lucky streak** — a dimension only graduates out of
+  focus once it's been reliably strong across multiple runs (hysteresis, in the technical sense:
+  it resists flipping back and forth on noise). Once it graduates, coaching moves on to the next
+  weakest thing — always one habit at a time.
+- **Regressions get flagged immediately, off to the side.** If something you already mastered
+  starts slipping, that's surfaced as its own alert the moment it happens, instead of waiting for
+  it to become the new bottleneck.
+- **Two runs before any of this talks about trend.** The very first `/analyse` is always a
+  baseline — ranked, but with no claim about pace yet, because you can't measure a trend from one
+  point. Real trend data starts on your second run. (Full math and rationale:
+  `docs/adr/0001-adaptive-personalized-progress-coaching.md`.)
+
+All of this runs on **deterministic code, not an LLM's gut feeling** — the EWMA/pace/mastery math
+lives in `scripts/compute-progress.py`, a plain script with no model call, so the *same* history
+always produces the *same* focus decision. The LLM's job is layered on top of that: scoring each
+prompt against the rubric, writing the plain-English rationale, and picking concrete next steps
+from a fixed playbook (`skills/progress-coach/references/dimension-playbooks.md`) — never
+improvising advice from scratch.
+
+---
+
 The plugin keeps **data and machinery separate — the plugin itself is machinery only.** Both
 inputs and outputs live under your Claude home, not inside the plugin's installed files (which
 Claude Code manages and can relocate on update), so nothing personal is ever committed. Beyond
@@ -140,22 +210,44 @@ front of it (below).
 
 ## Quick start (3 steps)
 
-1. **Add the marketplace and install the plugin** — inside any Claude Code session:
-   ```
-   /plugin marketplace add waqar40/prompt-improvement-framework
-   /plugin install prompt-journal
-   ```
-   That's the entire setup. The `UserPromptSubmit` recorder hook wires itself automatically
-   (`hooks/hooks.json`) — no settings.json editing, no `pip install`, no dependency hunting.
-2. **Send any throwaway prompt** in any repo. Confirm a `<branch>.txt` file appeared under
-   `~/.claude/prompt-journal/prompts/`. You're now recording automatically — nothing else to do.
-   If nothing appears, run `/configure` — it self-tests the recorder and reports exactly what's wrong.
-3. **Whenever you want feedback**, run `/analyse` (see [table below](#command-reference)).
-   It scores everything you've recorded and writes/updates your personal guide.
+**Before you start:** you need the [Claude Code CLI](https://docs.claude.com/en/docs/claude-code)
+installed, with a session open. Nothing else — no git clone, no Python install, no
+settings.json edits. The commands below go into the **Claude Code chat prompt**, not your
+terminal.
 
-That's the whole loop: **write prompts normally → `/analyse` → read your guide.** Not sure it's
-worth installing yet? Read the next section first — it shows you the exact output, and a
-completely safe way to run the whole thing, before you commit to anything.
+**Step 1 — Install the plugin.** Type these two lines into Claude Code, one at a time, and
+wait for each to finish before typing the next:
+```
+/plugin marketplace add waqar40/prompt-improvement-framework
+```
+```
+/plugin install prompt-journal
+```
+Both should print a success message. If either errors, stop here and see
+[Troubleshooting](#troubleshooting) — don't continue to Step 2 on an error.
+
+**Step 2 — Start a new session.** Close this Claude Code session and open a new one (or run
+`/exit` then relaunch) in the same directory. This is the only restart you will ever need — it
+lets Claude Code pick up the new commands and the recorder hook. Skipping this step is the
+single most common cause of "nothing happens."
+
+**Step 3 — Confirm it's live.** In the new session, type:
+```
+/configure
+```
+Expect a list of lines starting `[OK]`. If you instead see `[ACTION]`, it names one exact thing
+to do (e.g. "install `jq` or `python3`") — do that, then run `/configure` again. Don't move on
+until every line reads `[OK]` or `[FIXED]`.
+
+**Step 4 — Prove it's recording.** Type any throwaway prompt, e.g. `say hi`. Then check that a
+file now exists under `~/.claude/prompt-journal/prompts/` (any `.txt` file dated today). If it's
+there, installation is complete and every prompt from now on is recorded automatically — there
+is nothing further to configure, ever.
+
+**You're done.** From here the loop is just: **work normally → run `/analyse` whenever you want
+feedback → read your guide.** Not sure it's worth installing yet? Read the next section first —
+it shows you the exact output, and a way to run the whole pipeline that touches **zero** real
+data, before you commit to anything.
 
 <details>
 <summary>Developing on this repo directly (not installing it as a plugin)</summary>
@@ -168,8 +260,8 @@ git clone https://github.com/waqar40/prompt-improvement-framework ~/prompt-journ
 /plugin marketplace add ~/prompt-journal
 /plugin install prompt-journal
 ```
-See [Setup, in detail](#setup-in-detail) for the standalone `--legacy-hook` fallback if your
-Claude Code version predates the plugin system.
+Then do Steps 2–4 above exactly as written. See [Setup, in detail](#setup-in-detail) for the
+standalone `--legacy-hook` fallback if your Claude Code version predates the plugin system.
 </details>
 
 ---
@@ -435,13 +527,20 @@ them (see the [reference table](#command-reference) for their exact input/outcom
   intents/tools/tasks across your whole journal into candidates in `suggestions/<user>.json`
   — each typed provisionally as a **skill / subagent / hook / slash command / rule / script**,
   with the evidence (your real repeated prompts), a proposed trigger, and where it should live.
-- **`/scaffold-asset <id>`** makes the authoritative call: applies a decision matrix (grounded
-  in Anthropic's guidance — see `skills/asset-architect/references/sources.md`),
-  localizes placement by reading the **target repo's `CLAUDE.md` + `.claude/rules/`**, drafts
-  the asset to Anthropic's authoring standards, and **writes it only after you approve**.
+- **`/scaffold-asset <id>`** makes the authoritative call: reads the target repo's real code when
+  the need is code-related, pulls CLAUDE.md/rules/Confluence/prompts/docs/memory files, then
+  **researches** the topic's edge cases, anti-patterns, and Responsible AI considerations — asking
+  you a specific question rather than assuming whenever a source is missing or ambiguous. It then
+  applies a decision matrix (grounded in Anthropic's guidance — see
+  `skills/asset-architect/references/sources.md`), localizes placement by reading the target
+  repo's `CLAUDE.md` + `.claude/rules/`, writes a short **plan** and gets it confirmed, drafts the
+  asset to Anthropic's authoring standards, and **writes it — plus its real, on-disk validation
+  artifact — only after you approve**.
 - **`/review-asset`** audits an asset (new or old) against the same quality gate, any time you
   want a second opinion — including instructional-semantics checks (Section G: contradiction,
-  ambiguity, persona consistency, cognitive load, semantic coverage, composition-conflict).
+  ambiguity, persona consistency, cognitive load, semantic coverage, composition-conflict) and
+  Section H (plan-first, researched edge cases, Responsible AI, a verification that's an actual
+  file on disk, and — for judgment-shaped artifacts — that it's eval-driven and deterministic).
 - **`/fix-asset`** applies the review's `mechanical` findings verbatim (a dangling reference, an
   invalid frontmatter key) without a full scaffolding pass; anything needing judgment is routed
   back to `/scaffold-asset`.
@@ -529,12 +628,14 @@ Idempotent — re-running never double-counts a prompt.
 ### `/scaffold-asset`
 
 **What it does** — turns a recurring pattern (surfaced by `/analyse`) into a real, reusable
-Claude Code asset: a skill, subagent, hook, slash command, memory rule, or script.
+Claude Code asset: a skill, subagent, hook, slash command, memory rule, or script. Grounds in the
+target repo's real code and docs, **researches** the topic's edge cases/anti-patterns/Responsible
+AI considerations rather than assuming, and writes a confirmed **plan** before drafting.
 
 | | |
 |---|---|
 | **Input** | **Required**: a candidate id from `<outcomes>/suggestions/<user>.json` (e.g. `/scaffold-asset sg-014`), or a plain-English description of the need typed inline. Optional grounding flags: `--repo <path>` (target repo to scaffold into), `--confluence <url\|id>`, `--docs <path>`, `--code <glob>`, `--prompts <log\|user>`, `--user <name>`. |
-| **Outcome** | First prints a **grounding brief** (what it read from the target repo's code/`CLAUDE.md`/rules, plus any Confluence/docs/prompts you pointed it at) and a **draft** of the asset — type, placement, and content. **It writes nothing until you approve the draft.** After approval: the new file is written to its canonical location (e.g. `.claude/skills/<name>/SKILL.md`) with a built-in verification (evals, output contract, or an exit-code test). |
+| **Outcome** | First prints a **grounding brief** (what it read from the target repo's code/`CLAUDE.md`/rules/memory files, plus any Confluence/docs/prompts you pointed it at) and a **research brief** (topic sources, code read, anti-patterns checked, the Responsible AI checklist, and any open questions it asks you rather than assuming). Then a short **plan** (type, placement, verification approach) and a **draft** of the asset. **It writes nothing until you approve the plan + draft.** After approval: the new file is written to its canonical location (e.g. `.claude/skills/<name>/SKILL.md`) along with its **real, on-disk validation artifact** (evals.json, output contract, or an exit-code test — never just a description of one), and its own body carries a proportional plan-first step. |
 | **When to run it** | When `/analyse` or `asset-suggester` flags a repeated pattern worth turning into an asset, or any time you want to hand-build one from a described need. |
 
 ### `/review-asset`
@@ -542,7 +643,10 @@ Claude Code asset: a skill, subagent, hook, slash command, memory rule, or scrip
 **What it does** — audits an *existing* skill/agent/hook/command/rule/script against the same
 quality gate `/scaffold-asset` builds to — including **Section G**, the instructional-prose axis
 (contradiction, ambiguity, persona consistency, cognitive load, semantic coverage, and
-composition-conflict against every file the asset references). Read-only: it reports, it never edits.
+composition-conflict against every file the asset references), and **Section H**, plan-first +
+researched edge cases + Responsible AI (does the artifact carry its own plan-first step, is its
+verification a real file on disk, is a judgment-shaped artifact eval-driven and deterministic).
+Read-only: it reports, it never edits.
 
 | | |
 |---|---|
@@ -720,18 +824,22 @@ Code manages and can relocate on update).
         references/dimension-playbooks.md concrete rule(s)/exercise(s) per rubric dimension
     skills/prompt-example-curator/    banding + guide curation (embeds progress-coach's teaser)
     skills/asset-suggester/           clusters recurring work into asset candidates
-    skills/asset-architect/           multi-source grounding consumer: type + placement + scaffold
-        references/artifact-anatomy.md      the skeleton of each emitted artifact (skill/agent/hook/…)
-        references/grounding-sources.md     how it grounds from code, CLAUDE.md/rules, Confluence, prompts, docs
-        references/quality-gate.md          the SHARED build+review checklist + rubric scorecard (sections A-G)
+    skills/asset-architect/           multi-source grounding + deep-research consumer: type + placement + scaffold
+        references/artifact-anatomy.md      the skeleton of each emitted artifact (skill/agent/hook/…) + the 4 universal laws
+        references/grounding-sources.md     how it grounds from code, CLAUDE.md/rules, Confluence, prompts, docs, memory files
+        references/research.md              deep research: code grounding, topic research, anti-pattern table, Responsible AI checklist
+        references/plan-template.md         the written plan to confirm before drafting + the plan-first rule every artifact must carry
+        references/quality-gate.md          the SHARED build+review checklist + rubric scorecard (sections A-H)
         references/semantic-consistency.md  Section G — contradiction/ambiguity/persona/cognitive-load/coverage/composition
-        references/verification-harness.md  the evals.json schema + grader types behind Section F
+        references/verification-harness.md  the evals.json schema + grader types behind Section F/H4 — must be a real file on disk
     skills/artifact-reviewer/         read-only audit of existing assets against the quality gate
     skills/asset-fixer/               applies only the review's fully-specified (mechanical) findings
     skills/prompt-journal/            end-to-end pipeline
     skills/configure/                 OS-detect + run the right configurator
     skills/catalog/                   capability catalog (commands/skills/agents)
     skills/test-framework/            the /test play (end-to-end framework test)
+    skills/version-control-shortcut/  resolves "commit this"/"push it"/"version-control it" + guards gitignored data paths
+        evals/evals.json                   1 golden + 2 adversarial cases (gitignored-path trap, force-push trap)
     commands/                         /analyse /prompt-review /scaffold-asset /review-asset /fix-asset /configure /catalog /test
     CLAUDE.md                         guidance for Claude working in this repo
 ```

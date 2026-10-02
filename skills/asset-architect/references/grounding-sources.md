@@ -16,9 +16,14 @@ doesn't support.)
 | **Confluence pages** | `afn_confluence` MCP: `get_page_by_title` / `get_page` / `search_confluence` / `get_child_pages` / `get_tables_from_page`. Accept a page URL, id, or title. | Design docs, runbooks, API/contract specs, domain glossary — the "why" behind the need. |
 | **Raw prompts** | The journal: `<outcomes>/suggestions/<user>.json` evidence + `<outcomes>/scores/<user>.jsonl` (outcomes dir), and the source logs under the journal dir (default `~/.claude/prompt-journal/prompts`). | The user's actual words and the recurrence that justified the asset — the exact triggers/verbs to bake into the description. |
 | **Documents** | `Read` for md/txt (and PDFs where poppler is present); otherwise extract text with a local lib (`python -c "import fitz"` / `pypdf`; `python-docx` for .docx) into the scratchpad, then `Read` that. Never send document contents to an external service. | One-pagers, PRDs, engineering guides, vendor docs the artifact must conform to. |
+| **Assistant memory files** | `Read` `~/.claude/projects/<project-slug>/memory/MEMORY.md` and any linked note files it points to, for this user/repo, if present. | Prior learnings, feedback, and decisions already captured — avoid re-deriving them from scratch, and never silently contradict one. |
+| **Topic research (beyond the repo)** | `WebSearch`/`WebFetch` for authoritative, dated sources when the need touches a domain/technique this repo's code doesn't already demonstrate. See `references/research.md` for when this is required and the edge-case/anti-pattern/Responsible-AI checks that go with it. | External grounding for judgment-shaped artifacts (reviewers, graders, critics) and for facts no local source answers. |
 
 ## Building the grounding brief (do this before deciding type or drafting)
 
+0. **Check memory first.** Read the assistant memory files and the always-on layer below before
+   searching anything external — don't re-derive what's already recorded, and surface (don't
+   silently override) anything it contradicts.
 1. **Resolve the target project** from the candidate metadata (`target_project.root_path` → local;
    else `git_remote` → read-only worktree/clone; else evidence-only, and say so).
 2. **Read the always-on layer**: the repo's CLAUDE.md + `.claude/rules/` + `~/.claude/rules/`.
@@ -28,6 +33,9 @@ doesn't support.)
    the file/command/endpoint it wraps, the convention it must match.
 5. **Record grounding-gaps** — anything the need assumes that you cannot find in the evidence, and
    anything the evidence shows that the need ignores. Gaps become open questions, not guesses.
+6. **Hand off to deep research** (`references/research.md`) for anything this local pass didn't
+   resolve — a domain fact, an edge case, a Responsible AI question. Never fill a gap with an
+   assumption; research it or ask.
 
 Emit the brief as a short block the draft is built from:
 

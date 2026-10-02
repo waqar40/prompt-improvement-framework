@@ -104,22 +104,29 @@ existing `commit-message` skill was already invoked for that need, which is evid
 already covered, not a gap to raise a new candidate for. This proves `assets_used` actually
 changes clustering behavior, not just informs it.
 
-### Step 7 — asset-architect (trace + draft-only, approval gate)
+### Step 7 — asset-architect (trace + research + plan + draft-only, approval gate)
 Invoke **`asset-architect`** on that `_selftest` candidate with `target_repo` = a throwaway
 sandbox repo you create in temp (add a tiny `CLAUDE.md` + a `.claude/rules/` so there is real
 grounding to read). PASS if it: resolves/traces the target repo, reads its `CLAUDE.md`/rules,
-picks a type + placement, and **presents a draft WITHOUT writing any file** (the Step 4→5
-approval gate). **Do not approve** — assert no asset file was created. This proves the
-agent-role behaviour and the safety gate.
+emits a **research brief** (expect "none needed — repo-local only" for this fully-grounded
+version-control-intent candidate — confirms it doesn't fabricate external sources when local
+grounding already answers the need), presents a **plan** (type + placement + verification
+approach) before any draft content, picks a type + placement, and **presents a draft WITHOUT
+writing any file** (the Step 6→7 approval gate). **Do not approve** — assert no asset file and no
+validation-artifact file were created. This proves the agent-role behaviour and the safety gate.
 
-### Step 8 — artifact-reviewer (Section G + fixed/needs-authoring labels)
+### Step 8 — artifact-reviewer (Sections G/H + fixed/needs-authoring labels)
 Copy `tests/fixtures/assets/bad-skill/` into a scratch dir inside `<sbout>` (never review it in
 place — it's checked-in test data). Invoke **`artifact-reviewer`** on the copy. PASS if the result
 is `gate: FAIL` and includes, at minimum: a `blocking` finding for the invalid `argument-hint` key,
 a finding for the dangling `references/missing.md` row (G6), a finding for the vague description
 (G2), and a finding for the missing Constraints/verification (Section F) — with the first two
 labeled `mechanical` and the last two labeled needs-authoring (per Step 3 of
-`artifact-reviewer/SKILL.md`). Confirm it wrote nothing (still read-only).
+`artifact-reviewer/SKILL.md`). The fixture also has no plan-first step (H1) and no answered
+Responsible AI checklist (H3) — expect those as additional `major` needs-authoring findings (not
+`blocking`, since "Do the thing" isn't destructive-adjacent); their presence or absence doesn't
+change this step's PASS/FAIL, only the "at minimum" list above does. Confirm it wrote nothing
+(still read-only).
 
 ### Step 9 — asset-fixer (applies mechanical, skips the rest)
 Invoke **`asset-fixer`** on the same scratch copy with Step 8's findings. PASS if: the

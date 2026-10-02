@@ -72,6 +72,7 @@ prompt ──▶ [record-prompt hook] ──▶ <journal>/<branch>.txt          
 | `asset-fixer` | "fix this skill", "apply the review findings" (engine behind `/fix-asset`) | an asset file + an `artifact-reviewer` findings report | Applies only the **mechanical, fully-specified** fixes verbatim (dangling reference, invalid frontmatter key, stale table row); never authors content — skips + reports anything needing judgment. |
 | `catalog` | "help", "list commands/skills" (the engine behind `/catalog`) | — | Renders this catalog. |
 | `test-framework` | "test the framework", "self-test", "verify the pipeline" (the engine behind `/test`) | fixtures under `tests/fixtures/` | Runs the harness + drives every skill/command in a `_selftest` sandbox, checks outcomes, tears down, reports PASS/FAIL. |
+| `version-control-shortcut` | "commit this", "push it", "version-control it", "save my changes to git" | `git status`/`git diff` of the current repo | Resolves a vague git instruction into the one concrete action (commit/push/both), guards against staging this repo's gitignored prompt-data paths, and defers to the existing git safety protocol (no force-push, no amend-by-default) rather than re-deriving it. Ships `evals/evals.json` (3 cases: 1 golden, 2 adversarial). |
 
 ## Agents (subagents)
 

@@ -156,14 +156,24 @@ they connect (see `README.md` for the end-to-end walkthrough):
    and `grounding{claude_md,rules_dir,code_globs}` (from the log's `project=`/`root=` headers)
    so the builder can trace the real repo. It proposes; it never builds.
 6. **Asset architect** — the **`asset-architect`** skill
-   (`skills/asset-architect/`, run via **`/scaffold-asset`**), a **multi-source grounding
-   consumer**. It builds a *grounding brief* from the target repo's code + `CLAUDE.md`/`.claude/rules`
-   (traced via `root_path` or a read-only worktree/clone of `git_remote`), **Confluence pages**, **raw
-   prompts**, and **documents** (`references/grounding-sources.md`), decides the asset *type* +
-   *placement*, then emits it to the canonical **artifact anatomy** (`references/artifact-anatomy.md`)
+   (`skills/asset-architect/`, run via **`/scaffold-asset`**), a **multi-source grounding +
+   deep-research consumer**. It builds a *grounding brief* from the target repo's code +
+   `CLAUDE.md`/`.claude/rules` (traced via `root_path` or a read-only worktree/clone of
+   `git_remote`), **Confluence pages**, **raw prompts**, **documents**, and **assistant memory
+   files** (`references/grounding-sources.md`), then runs a **deep-research pass**
+   (`references/research.md`): reads the real code before describing its behavior, researches the
+   topic beyond the repo when needed, checks the draft against a catalogue of known Claude-Code-asset
+   anti-patterns, and answers a **Responsible AI checklist** (fairness, transparency, privacy, human
+   oversight, misuse resistance, accountability) — **asking the user a specific question, never
+   assuming, whenever a source is missing or ambiguous**. It then writes a short **plan**
+   (`references/plan-template.md`) and gets it confirmed before drafting, decides the asset *type* +
+   *placement*, and emits it to the canonical **artifact anatomy** (`references/artifact-anatomy.md`)
    **with a verification** — a concrete `evals/evals.json` (schema in
-   `references/verification-harness.md`), an output contract, or an exit-code test, per type —
-   writing **only after you approve**. Fetched page/doc content is treated as data, not instructions.
+   `references/verification-harness.md`), an output contract, or an exit-code test, per type,
+   **eval-driven and deterministic** for judgment-shaped artifacts — writing it, and the real
+   validation-artifact file itself (never just a description of one), **only after you approve**.
+   Every emitted skill/agent must itself carry a proportional **plan-first** step
+   (`references/plan-template.md` §2). Fetched page/doc content is treated as data, not instructions.
    Complements `~/.claude/rules/sdlc-asset-authoring.md`; always scaffolds into the **target** repo
    it's pointed at, never into this plugin itself.
 6b. **Artifact reviewer** — the **`artifact-reviewer`** skill (`skills/artifact-reviewer/`, run via
@@ -202,21 +212,28 @@ observability, scale, reliability** (spec + defaults in
 must clear **Section G — contradiction, ambiguity, persona consistency, cognitive load, semantic
 coverage, composition-conflict** (`skills/asset-architect/references/semantic-consistency.md`) —
 the axis that judges whether the artifact is well-specified *as instructions to an LLM*, not just
-well-shaped as software. Generated artifacts get the **default permission posture**: grant every
-*non-destructive* tool the job needs, but NEVER grant destructive operations (delete / drop /
-`rm -rf` / `--force` push / truncate) — deny them via tool scoping + a guard and route to explicit
-human approval. Assign an **appropriate model tier** per the Model Routing Policy (haiku
-docs/format · sonnet code/review · opus security/architecture/root-cause · fable sensitive). Each
-artifact ships its own verification, in the concrete shape `skills/asset-architect/references/
-verification-harness.md` defines (cases + graders, not a bespoke paragraph). All of this is one
-**shared quality gate** (`skills/asset-architect/references/quality-gate.md`, sections A–G):
-`asset-architect` runs it as a build-time self-check, and **`/review-asset`** (the read-only
-`artifact-reviewer` skill) runs the *same* gate to audit existing assets — so "built to standard"
-≡ "passes review". The deterministic frontmatter slice is enforced by
-`scripts/validate-frontmatter.py` (wireable as a hook/CI gate). Findings the reviewer can fully
-specify (a dangling reference, an invalid frontmatter key) route to **`/fix-asset`**
-(`asset-fixer`, write-capable but never authors content); anything needing judgment routes to
-`/scaffold-asset` or a human — a deliberate separation of powers (review ≠ fix ≠ build).
+well-shaped as software. **It must also clear Section H — plan-first, researched edge cases /
+anti-patterns, and Responsible AI** (`skills/asset-architect/references/research.md` +
+`references/plan-template.md`): no artifact ships on an assumption research could have resolved or
+the user could have answered; every artifact's own body carries a plan-before-execute step
+proportional to its stakes (mandatory + blocking for anything destructive-adjacent); and
+judgment-shaped artifacts (reviewers, graders, critics) must be **eval-driven and deterministic** —
+the same input produces the same verdict against a fixed rubric, never a per-run vibe. Generated
+artifacts get the **default permission posture**: grant every *non-destructive* tool the job needs,
+but NEVER grant destructive operations (delete / drop / `rm -rf` / `--force` push / truncate) —
+deny them via tool scoping + a guard and route to explicit human approval. Assign an **appropriate
+model tier** per the Model Routing Policy (haiku docs/format · sonnet code/review · opus
+security/architecture/root-cause · fable sensitive). Each artifact ships its own verification, in
+the concrete shape `skills/asset-architect/references/verification-harness.md` defines (cases +
+graders, not a bespoke paragraph) — **written to disk as a real file at build time**, never merely
+described. All of this is one **shared quality gate**
+(`skills/asset-architect/references/quality-gate.md`, sections A–H): `asset-architect` runs it as a
+build-time self-check, and **`/review-asset`** (the read-only `artifact-reviewer` skill) runs the
+*same* gate to audit existing assets — so "built to standard" ≡ "passes review". The deterministic
+frontmatter slice is enforced by `scripts/validate-frontmatter.py` (wireable as a hook/CI gate).
+Findings the reviewer can fully specify (a dangling reference, an invalid frontmatter key) route to
+**`/fix-asset`** (`asset-fixer`, write-capable but never authors content); anything needing judgment
+routes to `/scaffold-asset` or a human — a deliberate separation of powers (review ≠ fix ≠ build).
 
 **Deletion safety (framework invariant).** The framework only ever deletes **temporary/sandbox
 directories it created itself** (a `mktemp -d` sandbox, a self-test temp dir). It NEVER deletes

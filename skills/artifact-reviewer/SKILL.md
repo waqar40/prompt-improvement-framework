@@ -18,8 +18,10 @@ to, so "passes review" ≡ "built to standard".
 | `../asset-architect/references/quality-gate.md` | The shared checklist + rubric scorecard + roll-up (the gate). |
 | `../asset-architect/references/artifact-anatomy.md` | The skeleton each type should have + the 7 rubrics + posture + model. |
 | `../asset-architect/references/semantic-consistency.md` | Section G — the instructional-prose axis: contradiction, ambiguity, persona, cognitive-load, coverage, composition-conflict, and the repo-local custom-check extension point. |
-| `../asset-architect/references/verification-harness.md` | The verification shape Section F checks for. |
+| `../asset-architect/references/verification-harness.md` | The verification shape Section F checks for, incl. that it must be a real file on disk (H4). |
 | `../asset-architect/references/sources.md` | Per-type frontmatter authoring rules. |
+| `../asset-architect/references/research.md` | The anti-pattern table + Responsible AI checklist Section H checks against. |
+| `../asset-architect/references/plan-template.md` | The plan-first requirement (H1) every scaffolded artifact's own body must carry. |
 
 ## Inputs
 - `target` (optional): an asset file, an asset dir, or a repo root. **Default: the current repo's
@@ -38,26 +40,31 @@ Run `python scripts/validate-frontmatter.py <target>` and fold its ERROR/WARN in
 (section A of the gate). A frontmatter ERROR is **blocking**.
 
 ### Step 3 — Judgment review against the gate
-For each asset, read it (and, for grounding claims and Section G, every file it references — a
+For each asset, read it (and, for grounding claims and Sections G/H, every file it references — a
 skill's `references/` table, an agent's "follow `<skill>.md`" line, a command's target skill) and
-walk the quality gate sections **B–G**: anatomy/structure & correct type · the 7 rubrics ·
+walk the quality gate sections **B–H**: anatomy/structure & correct type · the 7 rubrics ·
 permission posture (destructive ops denied? read-only roles actually read-only?) · model-tier fit ·
-verification present · instructional semantics (`semantic-consistency.md`: contradiction,
-ambiguity, persona, cognitive-load, coverage, composition-conflict — check every referenced file
-actually exists and doesn't contradict the referencer). If `<repo>/.claude/diagnostics.md` (or
-`.claude/rules/diagnostics.md`) exists, check each of its NEVER/ALWAYS lines too (G7). Cite a
-concrete `file:line` for every finding; **never fabricate** one. Judge like an adversarial
-reviewer, but flag only gaps that affect correctness, safety, or a stated best practice — not taste.
+verification present (and is it an actual file on disk, not just a description — H4) ·
+instructional semantics (`semantic-consistency.md`: contradiction, ambiguity, persona,
+cognitive-load, coverage, composition-conflict — check every referenced file actually exists and
+doesn't contradict the referencer) · research/plan-first/Responsible AI (`research.md` +
+`plan-template.md`: does the artifact's own body carry a plan-first step proportional to its
+stakes (H1); if it's judgment-shaped, is it eval-driven and deterministic, not vibes (H4); does
+anything about it raise a fairness/privacy/human-oversight/misuse-resistance gap (H3)). If
+`<repo>/.claude/diagnostics.md` (or `.claude/rules/diagnostics.md`) exists, check each of its
+NEVER/ALWAYS lines too (G7). Cite a concrete `file:line` for every finding; **never fabricate** one.
+Judge like an adversarial reviewer, but flag only gaps that affect correctness, safety, or a stated
+best practice — not taste.
 For each finding, note whether it is **mechanical** (fully specified — a stale reference row, an
 invalid frontmatter key, a dangling link — safe for `asset-fixer` to apply verbatim) or **needs
 authored content/redesign** (route to `asset-architect`/a human); this label drives Step 5.
 
 ### Step 4 — Score, gate, report
 Compute the roll-up per `quality-gate.md` and emit, per asset: `{path, type, score, gate: PASS|FAIL,
-blocking[], major[], minor[], rubric_coverage{7}, semantic_coverage{6}}` then a short markdown
-summary — each finding as `file:line — issue — fix — mechanical|needs-authoring`. For a tree, add a
-leaderboard (worst gate failures first) and totals. **Gate = FAIL** if any blocking item or an
-unaddressed rubric.
+blocking[], major[], minor[], rubric_coverage{7}, semantic_coverage{6}, responsible_ai_coverage{4}}`
+then a short markdown summary — each finding as `file:line — issue — fix — mechanical|needs-authoring`.
+For a tree, add a leaderboard (worst gate failures first) and totals. **Gate = FAIL** if any
+blocking item, an unaddressed rubric, or an unanswered Section H check.
 
 ### Step 5 — Route fixes (do not apply)
 List the fixes, grouped blocking→minor, each tagged from Step 3. Point **mechanical** fixes to
