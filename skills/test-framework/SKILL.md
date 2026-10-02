@@ -18,11 +18,12 @@ the foundation.
 
 ## Fixtures (input)
 `tests/fixtures/logs/` — `feature-DEMO-1_alpha.txt` (project `alpha`; a 3-turn chain: a strong
-spec with no assets-used block, a vague "make it work" followed by a `tool: Read` block — no
-Edit/Write, evidence for a gap — and a terse "now push it" followed by a `skill: commit-message`
-block), `feature-DEMO-2_beta.txt` (project `beta`; "commit this" / "version-control it"), and
-`legacy-no-branch.txt` (old header, no project/root, no assets-used block — the pre-feature
-common case). `tests/fixtures/guide-sample.json` — a minimal guide for the renderer.
+spec with no assets-used block, a vague "make it work" followed by a `duration_s: 45` +
+`tool: Read` block — no Edit/Write, evidence for a gap — and a terse "now push it" followed by a
+`duration_s: 8` + `skill: commit-message` block), `feature-DEMO-2_beta.txt` (project `beta`;
+"commit this" / "version-control it"), and `legacy-no-branch.txt` (old header, no project/root,
+no assets-used block — the pre-feature common case). `tests/fixtures/guide-sample.json` — a
+minimal guide for the renderer.
 `tests/fixtures/assets/bad-skill/SKILL.md` — a deliberately defective skill: an invalid
 `argument-hint` frontmatter key (mechanical), a dangling `references/missing.md` row (mechanical,
 G6), a vague description (needs authoring, G2), and no Constraints/verification (needs authoring,
@@ -42,7 +43,8 @@ fails, stop and report.
 ### Step 2 — prompt-critic (scoring contract + assets_used context)
 Invoke **`prompt-critic`** on the strong fixture prompt and separately on `make it work`
 (passing the earlier turn as `session_context`, and this turn's `assets_used: ["tool: Read ->
-.../deploy.sh"]` from the fixture's assets-used block). PASS if each returns the JSON contract
+.../deploy.sh"]` from the fixture's assets-used block — `duration_s` is **not** passed to
+prompt-critic at all, it has no scoring role). PASS if each returns the JSON contract
 with a numeric `score`, a `verdict`, `suggested_eval_criteria`, and an `execution_context`; the
 vague one scores clearly lower / flags a D1 or E1 gap, and its `execution_context.consistency_note`
 notes the read-only tool use as corroborating evidence (not a separate penalty — the score gap
@@ -56,9 +58,10 @@ Run the **`prompt-journal`** pipeline with `path = tests/fixtures/logs`, `user =
 `PROMPT_OUTCOMES_DIR=<sbout>` so every output lands in the temp sandbox. Check the six outcomes:
 - `<sbout>/scores/_selftest.jsonl` exists, one row per fixture prompt, rows carry `project` + `root`
   (and `project` is `unknown`/empty for the legacy log — graceful degradation), a `run_id` shared
-  by every row this run wrote, a `dims` map (per prompt-journal's Step 2), and `assets_used`
+  by every row this run wrote, a `dims` map (per prompt-journal's Step 2), `assets_used`
   (non-empty for the "make it work"/"now push it" rows, `[]` for every other row — most rows,
-  matching the fixture).
+  matching the fixture), and `duration_s` (`45` / `8` on those same two rows, from the fixture's
+  `duration_s:` lines; `null` on every row whose entry has no assets-used block at all).
 - `<sbout>/reviews/_selftest/<branch>.md` exists **per file**, each with Strengths, Weaknesses, and
   an **Asset opportunities** section (the per-file outcome) — grounded in `assets_used` where present.
 - `<sbout>/progress/_selftest.json` exists (this run's `prompt-journal` Step 5 wiring produced it

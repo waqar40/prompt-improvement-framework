@@ -59,19 +59,25 @@ linter, and it is not a git working tree. Do not look for or invent build/run co
   <the prompt exactly as sent>
   ```
 - **An entry may end with an optional `assets-used` block** — machine-written by the
-  `PostToolUse`/`Stop` hooks (`scripts/record-tool-use.*` / `scripts/record-turn-end.*`),
-  recording which skills/subagents/tools/MCP tool calls actually ran as a result of that
-  prompt, with paths (MCP calls have no path — `(unresolved)`):
+  `Stop` hook (`scripts/record-turn-end.*`), carrying two kinds of line: an optional
+  **`duration_s: <seconds>`** line (how long the turn took, from the matching `UserPromptSubmit`
+  to this `Stop`) and zero or more **asset lines** recording which skills/subagents/tools/MCP
+  tool calls actually ran as a result of that prompt (written by `PostToolUse`'s
+  `scripts/record-tool-use.*`), with paths (MCP calls have no path — `(unresolved)`):
   ```
   ----- assets-used -----
+  duration_s: 42
   skill: prompt-critic -> skills/prompt-critic/SKILL.md
   tool: Edit -> /abs/path/to/file.py
   mcp: mcp__github__create_pull_request -> (unresolved)
   ----- end-assets-used -----
   ```
-  It's absent on most entries (turns with no trackable tool use, and all logs predating this
-  feature) — that's normal, not a gap. `/analyse` parses it as context for grading (see
-  `skills/prompt-journal/SKILL.md`), never as part of the scored prompt text.
+  `duration_s` appears on nearly every entry going forward (any turn whose `Stop` hook could
+  find a valid start-time marker) — the asset lines below it remain the part that's "absent on
+  most entries" (turns with no trackable tool use). Entries from before this feature, or where
+  the marker was missing/unwritable, have no block at all — that's normal, not a gap. `/analyse`
+  parses it as context for grading (see `skills/prompt-journal/SKILL.md`), never as part of the
+  scored prompt text.
 - Entries are append-only history. **Preserve them verbatim** — do not fix typos,
   rephrase, reorder, or "clean up" prompts in a raw log (including any `assets-used` block —
   it's still append-only history, just not user-authored). Their sloppiness is the data.
@@ -91,16 +97,19 @@ they connect (see `README.md` for the end-to-end walkthrough):
      blocks a prompt — it exits 0 on any error, and it **skips harness machine-output** (turns
      beginning `<task-notification>`) so agent notifications never land in the journal as if they
      were authored prompts. On a successful write it also drops a per-session marker (in a temp
-     dir, keyed by `session_id`) naming the file it just wrote, for the next hook to find.
+     dir, keyed by `session_id`) naming the file it just wrote **and this turn's start time
+     (epoch seconds)**, for the next hooks to find.
    - `scripts/record-tool-use.{ps1,sh}` (`PostToolUse`, matcher
      `Skill|Task|Read|Edit|Write|NotebookEdit|mcp__.*`) buffers each relevant tool call
      (skill/subagent name + resolved path, file path touched, or MCP tool name — MCP calls
      have no path, recorded as `(unresolved)`) to that same per-session temp buffer. Never
      logs Bash/Grep/Glob/etc. — asset invocations only, by design.
-   - `scripts/record-turn-end.{ps1,sh}` (`Stop`) flushes the buffer into the `assets-used` block
-     (see File taxonomy above) appended to the marker's journal file, then deletes the marker +
-     buffer. Writes nothing if no marker exists (prompt was skipped) or the buffer is empty (no
-     trackable tool use that turn) — it never misattributes tool calls to the wrong entry.
+   - `scripts/record-turn-end.{ps1,sh}` (`Stop`) computes this turn's `duration_s` from the
+     marker's start time and flushes it — plus the buffered tool calls, if any — into the
+     `assets-used` block (see File taxonomy above) appended to the marker's journal file, then
+     deletes the marker + buffer. Writes nothing if no marker exists (prompt was skipped);
+     writes `duration_s` alone (no asset lines) when the turn used no trackable tools — it never
+     misattributes tool calls to the wrong entry.
    All three are best-effort and silent: exit 0 on any error, never block the turn. This is the
    only thing that writes raw logs.
 1. **Review skill/agent** — reads a raw log, applies the defined rubric to each prompt,
@@ -116,13 +125,15 @@ they connect (see `README.md` for the end-to-end walkthrough):
    append-only, one prompt-critic result per line (with prompt excerpt, source log/branch,
    **project + root** (from the log header), date, `run_id` (the `/analyse` invocation's
    timestamp — the checkpoint unit progress tracking compares pace across), score, verdict, band,
-   a compact `dims` map (`{"D1":"met",...}`, feeds `progress-coach`), and `assets_used` — the
-   parsed `assets-used` block, `[]` if the entry had none). `assets_used` is stored for audit
-   trail and passed to `prompt-critic` as grading **context only** — it never adds a scored
-   dimension (see `skills/prompt-critic/references/rubric.md`). `run_id`/`dims` are additive —
-   older rows predate them and are read as legacy (cold-start for progress purposes only). Never
-   rewrite past scores to make a trend look better. This store is what lets the guide be a
-   **compiled, overall** view grounded in the user's whole real history.
+   a compact `dims` map (`{"D1":"met",...}`, feeds `progress-coach`), `assets_used` — the
+   parsed asset lines from the `assets-used` block, `[]` if the entry had none — and
+   `duration_s` (the block's `duration_s:` line as a number, `null` if absent). `assets_used`
+   and `duration_s` are stored for audit trail and passed to `prompt-critic` as grading
+   **context only** — neither ever adds a scored dimension (see
+   `skills/prompt-critic/references/rubric.md`). `run_id`/`dims` are additive — older rows
+   predate them and are read as legacy (cold-start for progress purposes only). Never rewrite
+   past scores to make a trend look better. This store is what lets the guide be a **compiled,
+   overall** view grounded in the user's whole real history.
 2b. **Per-file reviews** — `<outcomes>/reviews/<user>/<branch-slug>.md`: one review per log (a
    related session), written by the pipeline. Because a file's prompts are related, the review rolls
    up that session's strengths/weaknesses and calls out **asset opportunities**

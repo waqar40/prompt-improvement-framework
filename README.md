@@ -172,7 +172,8 @@ real execution context, not just the words you typed:
         │
         ▼
  PostToolUse + Stop hooks ► ----- assets-used -----          scripts/record-tool-use.{ps1,sh}
- (buffer + flush what ran)   appended to that same entry      + record-turn-end.{ps1,sh}
+ (buffer + flush what ran,    duration_s + what ran, appended   + record-turn-end.{ps1,sh}
+  time this turn took)        to that same entry
         │
         ▼
  prompt-critic  ──────────►  <outcomes>/scores/<user>.jsonl   skill: rate each prompt
@@ -409,12 +410,15 @@ named after the current context, resolved in this order (slashes become hyphens 
 
 Slash commands (`/build`, `/init`) are recorded too.
 
-**What ran gets recorded alongside what you typed.** Once Claude finishes responding, if it
-invoked any skills, subagents, Read/Edit/Write/NotebookEdit tools, or MCP tool calls (anything
-named `mcp__*`), an `assets-used` block (name + resolved path for each — MCP calls have no
-path, recorded as `(unresolved)`) is appended to that same entry — automatically, no action
-needed. Turns that only used other tools (Bash, Grep, search, …) or no tools at all simply get
-no block; that's normal.
+**How long the turn took, and what ran, both get recorded alongside what you typed.** Once
+Claude finishes responding, an `assets-used` block is appended to that entry — automatically, no
+action needed — carrying `duration_s` (wall-clock seconds from your prompt to the response
+finishing) and, if it invoked any skills, subagents, Read/Edit/Write/NotebookEdit tools, or MCP
+tool calls (anything named `mcp__*`), one line per asset (name + resolved path — MCP calls have
+no path, recorded as `(unresolved)`). `duration_s` appears on nearly every turn; the asset lines
+below it only appear when something trackable actually ran — a turn that only used other tools
+(Bash, Grep, search, …) still gets a `duration_s`-only block, and that's normal. A turn where the
+hook couldn't find its start-time marker gets no block at all — also normal, just rarer.
 
 **Logs are append-only history — never edit them.** Their sloppiness is the data — and so is
 the `assets-used` block once it's written; it's machine-recorded, not yours to edit, but it's
@@ -622,7 +626,7 @@ Idempotent — re-running never double-counts a prompt.
 | | |
 |---|---|
 | **Input** | Optional **selector** (pick at most one) — a file/dir path (e.g. `~/.claude/prompt-journal/prompts/master.txt`), `--project <name>`, or `--branch <name>`. **Omit it entirely to analyse your whole journal** (the default, and the normal way to run it). Optional `--user <name>` — whose store/guide to update; defaults to your OS username. |
-| **Outcome** | For each log processed: a per-file review at `<outcomes>/reviews/<user>/<branch>.md` (that session's strengths/weaknesses + asset opportunities, grounded in what actually ran where available). Across the whole run: new lines appended to the append-only score store `<outcomes>/scores/<user>.jsonl` (each carrying `assets_used` + a per-dimension `dims` map); your adaptive focus updated at `<outcomes>/progress/<user>.{json,md}` (see [Your adaptive focus](#your-adaptive-focus)); your guide regenerated at `<outcomes>/guides/<user>.{json,md,pdf,docx}` (embedding the current focus); asset candidates refreshed at `<outcomes>/suggestions/<user>.json`. |
+| **Outcome** | For each log processed: a per-file review at `<outcomes>/reviews/<user>/<branch>.md` (that session's strengths/weaknesses + asset opportunities, grounded in what actually ran where available). Across the whole run: new lines appended to the append-only score store `<outcomes>/scores/<user>.jsonl` (each carrying `assets_used`, `duration_s`, and a per-dimension `dims` map); your adaptive focus updated at `<outcomes>/progress/<user>.{json,md}` (see [Your adaptive focus](#your-adaptive-focus)); your guide regenerated at `<outcomes>/guides/<user>.{json,md,pdf,docx}` (embedding the current focus); asset candidates refreshed at `<outcomes>/suggestions/<user>.json`. |
 | **When to run it** | Regularly — weekly is a reasonable cadence. Narrow it (`--project`, `--branch`, a file) only when you want to re-check one slice without waiting on the whole journal. |
 
 ### `/scaffold-asset`
@@ -809,7 +813,7 @@ Code manages and can relocate on update).
     scripts/configure.{ps1,sh}        dirs + self-test + optional deps (the /configure command)
     scripts/record-prompt.{ps1,sh}    recorder hook (writes the logs; drops a per-turn marker)
     scripts/record-tool-use.{ps1,sh}  buffers asset invocations for the current turn (PostToolUse hook)
-    scripts/record-turn-end.{ps1,sh}  flushes the buffer into an assets-used block (Stop hook)
+    scripts/record-turn-end.{ps1,sh}  computes duration_s + flushes the buffer into an assets-used block (Stop hook)
     scripts/render-guide.py           JSON guide -> Markdown + PDF + Word renderer (incl. the focus teaser)
     scripts/compute-progress.py       deterministic EWMA/pace/mastery engine behind progress-coach (no LLM call)
     scripts/selftest.sh               deterministic sandboxed self-test (first step of /test)

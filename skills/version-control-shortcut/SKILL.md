@@ -18,11 +18,17 @@ Never assume what "this"/"it" refers to — resolve it from the real diff, or as
 ambiguous (e.g. unrelated changes across multiple unrelated files with no single clear "this").
 
 ## Step 2 — Guard the repo's known-sensitive paths
-Before staging anything, check whether any changed/untracked path matches this repo's
-`.gitignore`'d data directories (`/prompts/`, `/logs/`, `/prompts-review-outcomes/`, `/scores/`,
-`/guides/`, `/suggestions/`, `/reviews/`). If one appears as untracked-but-not-ignored (e.g. a
-relocated `PROMPT_JOURNAL_DIR`/`PROMPT_OUTCOMES_DIR` pointed inside the repo by mistake), **stop
-and flag it** — never silently `git add` a path that looks like personal prompt data.
+Before staging anything, feed every changed/untracked path from Step 1 through
+`git check-ignore -v --stdin` in one call (exit 1 = nothing matched = clean) — never a plain
+substring match against the directory names (`/prompts/`, `/logs/`, `/prompts-review-outcomes/`,
+`/scores/`, `/guides/`, `/suggestions/`, `/reviews/` are root-anchored in `.gitignore`, so e.g.
+`tests/fixtures/logs/...` is a false positive for `/logs/` on a naive substring check —
+`git check-ignore` applies the real, anchored match and is the only authoritative source; prefer
+the single `--stdin` call over a per-path loop, which can hit shell/PATH quirks in some
+environments). If a path matches **and** is untracked (`git ls-files <path>` empty) — e.g. a
+relocated `PROMPT_JOURNAL_DIR`/`PROMPT_OUTCOMES_DIR` pointed inside the repo by mistake — **stop
+and flag it**, never silently `git add` it. An already-tracked file (checked-in fixtures, docs
+that happen to mention one of those words) is never a hit, no matter what its path contains.
 
 ## Step 3 — Resolve the action and state the plan
 Map the instruction onto one concrete action:
