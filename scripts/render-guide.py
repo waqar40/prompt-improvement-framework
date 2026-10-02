@@ -236,8 +236,30 @@ def render_pdf(g: dict, out: Path) -> None:
               boxed([RT(f"<b>Most common gap:</b> {escape(s['common_gap'])}", body), Spacer(1, 3),
                      RT(f"<b>Strongest habit:</b> {escape(s['strongest_habit'])}", body), Spacer(1, 3),
                      RT(f"<b>Trend:</b> {escape(s['trend'])}", body)], "#f7f8fa", "#dfe3e8"),
-              Spacer(1, 5),
-              boxed([RT("<b>How to read each prompt below.</b> The <b>scorecard</b> lists every rubric "
+              Spacer(1, 5)]
+
+    fp = g.get("focus_plan")
+    if fp and fp.get("dimension"):
+        tag = " (provisional - still building a baseline)" if fp.get("provisional") else ""
+        focus_box = [
+            RT("<b>Your Focus Right Now</b>", ParagraphStyle("focus_h", parent=body, fontSize=12)),
+            Spacer(1, 4),
+            RT(f"<b>{escape(fp['dimension'])} {escape(fp.get('label', ''))}</b>{escape(tag)}: "
+               f"{escape(fp.get('one_line', ''))}", body),
+            Spacer(1, 3),
+            RT(f"<b>Pace:</b> {escape(fp.get('pace', 'insufficient_data'))}", body),
+        ]
+        rc = fp.get("regression_count", 0) or 0
+        if rc:
+            focus_box += [Spacer(1, 3),
+                          RT(f"&#9888; {rc} dimension(s) slipping &mdash; see progress/{escape(g['user'])}.md for detail",
+                             ParagraphStyle("warn", parent=body, textColor=HEX("#b42318")))]
+        focus_box += [Spacer(1, 3),
+                      RT(f"<i>Full per-dimension plan: progress/{escape(g['user'])}.md</i>",
+                         ParagraphStyle("focus_i", parent=sub, fontName="Helvetica-Oblique"))]
+        story += [boxed(focus_box, "#f3e8ff", "#c9a7e8"), Spacer(1, 5)]
+
+    story += [boxed([RT("<b>How to read each prompt below.</b> The <b>scorecard</b> lists every rubric "
                        "dimension with a status - <font color='#1a7f37'><b>Met</b></font>, "
                        "<font color='#9a6700'><b>Partial</b></font>, "
                        "<font color='#b42318'><b>Missing</b></font>, or <b>n/a</b> (not needed by this task). "
@@ -360,6 +382,20 @@ def render_docx(g: dict, out: Path) -> None:
     doc.add_paragraph()
     box(s["common_gap"], "#f7f8fa", bold_lead="Most common gap:")
     box(s["strongest_habit"], "#f7f8fa", bold_lead="Strongest habit:")
+
+    fp = g.get("focus_plan")
+    if fp and fp.get("dimension"):
+        tag = " (provisional - still building a baseline)" if fp.get("provisional") else ""
+        doc.add_paragraph().add_run("Your Focus Right Now").bold = True
+        focus_text = f"{fp.get('label', '')}{tag}: {fp.get('one_line', '')}"
+        box(focus_text, "#f3e8ff", bold_lead=fp["dimension"])
+        box(f"Pace: {fp.get('pace', 'insufficient_data')}", "#f3e8ff")
+        rc = fp.get("regression_count", 0) or 0
+        if rc:
+            box(f"{rc} dimension(s) slipping - see progress/{g['user']}.md for detail",
+                "#f3e8ff", color="#b42318")
+        box(f"Full per-dimension plan: progress/{g['user']}.md", "#f3e8ff", italic=True)
+
     box("Each prompt has a scorecard (Met / Partial / Missing / n-a per rubric dimension; the "
         "score is the weighted roll-up of applicable rows) and a transformation table (each gap "
         "-> a concrete rewrite + the principle it teaches).", "#eef3fb", color="#0b3d91",

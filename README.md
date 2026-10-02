@@ -32,6 +32,10 @@ normally, and run one command whenever you want your personal guide refreshed.
 
 Set expectations before you install anything — this is a coaching tool, not magic.
 
+> **Not sure what this actually produces?** [`docs/sample-guide/sample-guide.pdf`](docs/sample-guide/sample-guide.pdf)
+> is a complete sample report, built from generic example prompts — no install, no real data,
+> just a look at the real output before you commit to anything.
+
 **What you get:**
 - A **plain-text, append-only log** of every prompt you send, per branch/project, recorded
   automatically — you never type anything to make this happen.
@@ -462,6 +466,12 @@ penalizes a well-specified prompt just because the agent decided no change was n
 
 ## Your guide
 
+**See a sample report first.** [`docs/sample-guide/sample-guide.pdf`](docs/sample-guide/sample-guide.pdf)
+(also readable inline as [`sample-guide.md`](docs/sample-guide/sample-guide.md)) is a complete,
+fully-worked report built from **generic example prompts** — not anyone's real data — so you can
+see exactly what your own guide will look like, with every section this README describes,
+*before* you install anything or send a single prompt.
+
 `~/.claude/prompt-journal/prompts-review-outcomes/guides/<user>.md` is your living,
 personalised output, written by `/analyse`. It has:
 
@@ -822,6 +832,10 @@ Code manages and can relocate on update).
         assets/bad-skill/                 a deliberately defective skill (mechanical + needs-authoring findings)
         progress/                         two-checkpoint score-store fixture for progress-coach's self-test
     docs/adr/0001-adaptive-personalized-progress-coaching.md   the adaptive-coaching design decision + research
+    docs/sample-guide/                a full sample report (generic prompts, not real data) — see "Your guide"
+        sample-guide.json                  the structured source (same schema a real guides/<user>.json has)
+        sample-guide.pdf                   rendered PDF — what a new user previews before installing
+        sample-guide.md                    rendered Markdown — renders inline in GitHub's file browser
     skills/prompt-critic/             scoring rubric + rewrite (+ optional asset_hint)
     skills/progress-coach/            adaptive focus + pace — reads compute-progress.py's output, authors the plan
         references/algorithm.md           field glossary — what the script already decided, never recompute it
