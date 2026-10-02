@@ -57,6 +57,18 @@ code).
 | `exit_code` | a script/hook returns the expected code for a payload | hook self-tests, `validate-frontmatter.py` |
 | `prompt` | a second, independent LLM call judges a qualitative property | "is this rewrite shorter and does it fix the blocking gap?" — use sparingly, it's the least deterministic grader |
 
+## Validation artifacts must be generated, not described (gate H4)
+
+This is a build-time deliverable, not a design note: when `asset-architect` reaches the write step,
+it must create the actual verification **file** on disk — `evals/evals.json`, the hook's
+sample-payload test, the script's self-test — in the same action as the artifact itself. A
+paragraph describing what the eval *would* check does not satisfy Section F or H4; `artifact-reviewer`
+checks for the file's existence and shape (non-empty, each case names ≥1 grader), not a claim in the
+body. Judgment-shaped artifacts (a reviewer, a critic, a grader) additionally need to be
+**eval-driven and deterministic**: the same input, run twice, must produce the same verdict against
+the fixed rubric/grader set — if a check is genuinely non-deterministic (the `prompt` grader, a
+second LLM call), say so explicitly and keep it to the minimum needed, per the grader table above.
+
 ## Running it
 
 No dedicated binary — either:

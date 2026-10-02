@@ -1,0 +1,769 @@
+{
+  "user": "sample",
+  "updated": "2026-10-02",
+  "source": "SAMPLE \u2014 generic example prompts, not real data",
+  "snapshot": {
+    "reviewed": 7,
+    "excellent": 3,
+    "good": 1,
+    "bad": 3,
+    "trend": "first checkpoint \u2014 no trend yet (a real guide shows improving/flat/regressing once you have 2+ /analyse runs)",
+    "common_gap": "E1 (success is defined) \u2014 the most frequent gap in this sample",
+    "strongest_habit": "D9/D10 (decomposition fit, structural economy) \u2014 met on every applicable prompt",
+    "coverage": {
+      "files": 3,
+      "projects": [
+        "alpha",
+        "beta",
+        "example-project"
+      ],
+      "from": "2026-08-09",
+      "to": "2026-08-11"
+    }
+  },
+  "focus_plan": {
+    "dimension": "E1",
+    "label": "Success is defined",
+    "one_line": "E1 (success is defined) sits at level 0.45 across 5 observations, the lowest of any dimension with real evidence",
+    "pace": "insufficient_data",
+    "regression_count": 0,
+    "provisional": true
+  },
+  "sections": [
+    {
+      "band": "excellent",
+      "title": "What excellent looks like",
+      "examples": [
+        {
+          "label": "Spec + exact output format + testable acceptance line",
+          "score": 100,
+          "verdict": "STRONG",
+          "kind": "one_shot",
+          "date": "2026-08-10",
+          "prompt": "Add a `--dry-run` flag to scripts/deploy.sh that prints each command it would run, prefixed with \"[dry-run]\", and exits 0 without executing anything. Acceptance: `bash scripts/deploy.sh --dry-run` makes no network calls and prints one line per docker/kubectl command.",
+          "why": "Names the exact file and flag (D1/D2), pins the output shape (D3), and closes with a binary acceptance line (E1/E2) that also anticipates the main failure mode (E4).",
+          "rubric": [
+            {
+              "id": "D1",
+              "verdict": "met",
+              "sev": "none",
+              "evidence": "led by the action verb 'Add'; one unambiguous instruction"
+            },
+            {
+              "id": "D2",
+              "verdict": "met",
+              "sev": "none",
+              "evidence": "scope is scripts/deploy.sh; boundary 'without executing anything' is explicit"
+            },
+            {
+              "id": "D3",
+              "verdict": "met",
+              "sev": "none",
+              "evidence": "'[dry-run]' prefix + one line per command pins the shape"
+            },
+            {
+              "id": "D4",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "the why wouldn't change the implementation"
+            },
+            {
+              "id": "D5",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "agent can read deploy.sh directly"
+            },
+            {
+              "id": "D6",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "format fully described without an example"
+            },
+            {
+              "id": "D7",
+              "verdict": "met",
+              "sev": "none",
+              "evidence": "every instruction says what TO do"
+            },
+            {
+              "id": "D8",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "verifiable coding task, no hallucination risk"
+            },
+            {
+              "id": "D9",
+              "verdict": "met",
+              "sev": "none",
+              "evidence": "simple enough for one prompt"
+            },
+            {
+              "id": "D10",
+              "verdict": "met",
+              "sev": "none",
+              "evidence": "no over-engineering, no dead instructions"
+            },
+            {
+              "id": "E1",
+              "verdict": "met",
+              "sev": "none",
+              "evidence": "the acceptance line defines correct output"
+            },
+            {
+              "id": "E2",
+              "verdict": "met",
+              "sev": "none",
+              "evidence": "'makes no network calls and prints one line per ... command' is binary"
+            },
+            {
+              "id": "E3",
+              "verdict": "met",
+              "sev": "none",
+              "evidence": "covers both correctness (no execution) and format (prefix, one line each)"
+            },
+            {
+              "id": "E4",
+              "verdict": "met",
+              "sev": "none",
+              "evidence": "'exits 0 without executing anything' guards the main failure mode"
+            }
+          ],
+          "transformation": []
+        },
+        {
+          "label": "Terse chain step, correctly so",
+          "score": 88,
+          "verdict": "STRONG",
+          "kind": "chain_step",
+          "date": "2026-08-10",
+          "prompt": "now push it",
+          "why": "The referent ('it') and action resolve cleanly from the session; brevity here is correct, not under-specification.",
+          "chain": "Follows the dry-run-flag spec and 'make it work' in the same session \u2014 'it' resolves to the change just worked on.",
+          "rubric": [
+            {
+              "id": "D1",
+              "verdict": "met",
+              "sev": "none",
+              "evidence": "'it' resolves via session context; the verb (push) is unambiguous"
+            },
+            {
+              "id": "D2",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "a push has no extra constraints to state beyond the inherited branch"
+            },
+            {
+              "id": "D3",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "no output format applies to a git push"
+            },
+            {
+              "id": "D4",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "motivation wouldn't change the action"
+            },
+            {
+              "id": "D5",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "no external grounding needed"
+            },
+            {
+              "id": "D6",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "no example needed"
+            },
+            {
+              "id": "D7",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "too short to carry a framing signal either way"
+            },
+            {
+              "id": "D8",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "not a factual-risk task"
+            },
+            {
+              "id": "D9",
+              "verdict": "met",
+              "sev": "none",
+              "evidence": "a single step, not artificially split"
+            },
+            {
+              "id": "D10",
+              "verdict": "met",
+              "sev": "none",
+              "evidence": "appropriately terse for a chain step"
+            },
+            {
+              "id": "E1",
+              "verdict": "met",
+              "sev": "none",
+              "evidence": "success = the push completes against the current branch, inherited from context"
+            },
+            {
+              "id": "E2",
+              "verdict": "partial",
+              "sev": "minor",
+              "evidence": "doesn't state how the push's success would be confirmed (e.g. check the command's exit status)"
+            },
+            {
+              "id": "E3",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "a single quality axis (did it push) is at stake"
+            },
+            {
+              "id": "E4",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "no new failure mode beyond a normal git push"
+            }
+          ],
+          "transformation": []
+        },
+        {
+          "label": "One-word continuation, fully resolved by context",
+          "score": 100,
+          "verdict": "STRONG",
+          "kind": "chain_step",
+          "date": "2026-08-09",
+          "prompt": "ok continue",
+          "why": "A pure continuation acknowledgment that the session fully resolves \u2014 proof that a short chain step can be excellent, not just acceptable.",
+          "chain": "Follows 'where are we' in the same session; 'continue' carries the standing task forward with no new ambiguity.",
+          "rubric": [
+            {
+              "id": "D1",
+              "verdict": "met",
+              "sev": "none",
+              "evidence": "resolves cleanly to continuing whatever was just discussed"
+            },
+            {
+              "id": "D2",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "no new constraint is introduced by a continuation"
+            },
+            {
+              "id": "D3",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "no output format applies"
+            },
+            {
+              "id": "D4",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "n/a for a continuation"
+            },
+            {
+              "id": "D5",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "n/a"
+            },
+            {
+              "id": "D6",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "n/a"
+            },
+            {
+              "id": "D7",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "too short to carry a framing signal either way"
+            },
+            {
+              "id": "D8",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "n/a"
+            },
+            {
+              "id": "D9",
+              "verdict": "met",
+              "sev": "none",
+              "evidence": "single step, not split"
+            },
+            {
+              "id": "D10",
+              "verdict": "met",
+              "sev": "none",
+              "evidence": "exactly as long as it needs to be"
+            },
+            {
+              "id": "E1",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "a continuation inherits whatever success condition the standing task already had"
+            },
+            {
+              "id": "E2",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "n/a"
+            },
+            {
+              "id": "E3",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "n/a"
+            },
+            {
+              "id": "E4",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "n/a"
+            }
+          ],
+          "transformation": []
+        }
+      ]
+    },
+    {
+      "band": "good",
+      "title": "Good, one fix away",
+      "examples": [
+        {
+          "label": "Clear question, missing the one anchor",
+          "score": 73,
+          "verdict": "ADEQUATE",
+          "kind": "one_shot",
+          "date": "2026-08-09",
+          "prompt": "where are we",
+          "why": "A reasonable status check, but it doesn't name which thread or artifact it's asking about.",
+          "rubric": [
+            {
+              "id": "D1",
+              "verdict": "partial",
+              "sev": "minor",
+              "evidence": "clear intent (status check) but no named thread/artifact"
+            },
+            {
+              "id": "D2",
+              "verdict": "partial",
+              "sev": "minor",
+              "evidence": "no scope given for which work this covers"
+            },
+            {
+              "id": "D3",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "no output format needed for a status answer"
+            },
+            {
+              "id": "D4",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "n/a"
+            },
+            {
+              "id": "D5",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "n/a"
+            },
+            {
+              "id": "D6",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "n/a"
+            },
+            {
+              "id": "D7",
+              "verdict": "met",
+              "sev": "none",
+              "evidence": "neutral, non-prohibitive phrasing"
+            },
+            {
+              "id": "D8",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "n/a"
+            },
+            {
+              "id": "D9",
+              "verdict": "met",
+              "sev": "none",
+              "evidence": "single ask, not split"
+            },
+            {
+              "id": "D10",
+              "verdict": "met",
+              "sev": "none",
+              "evidence": "appropriately brief"
+            },
+            {
+              "id": "E1",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "an informational question has no 'correct output' beyond an honest status answer"
+            },
+            {
+              "id": "E2",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "n/a"
+            },
+            {
+              "id": "E3",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "n/a"
+            },
+            {
+              "id": "E4",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "n/a"
+            }
+          ],
+          "transformation": [
+            {
+              "id": "D1",
+              "before": "where are we",
+              "after": "where are we on the --dry-run flag work for scripts/deploy.sh?",
+              "principle": "Name the thread/artifact even in a quick status check so the answer can't drift to the wrong topic."
+            }
+          ],
+          "fix": "where are we on the --dry-run flag work for scripts/deploy.sh?"
+        }
+      ]
+    },
+    {
+      "band": "bad",
+      "title": "Anti-patterns to kill",
+      "examples": [
+        {
+          "label": "Vague success word after a fully-specified task",
+          "score": 65,
+          "verdict": "WEAK",
+          "kind": "chain_step",
+          "date": "2026-08-10",
+          "prompt": "make it work",
+          "why": "'it' resolves fine from context, but 'work' restates no success condition even though the prior turn already had one \u2014 leaving it unstated whether that acceptance line still applies.",
+          "chain": "Follows the --dry-run-flag spec in the same session.",
+          "rubric": [
+            {
+              "id": "D1",
+              "verdict": "met",
+              "sev": "none",
+              "evidence": "'it' resolves to the flag work via session context"
+            },
+            {
+              "id": "D2",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "no new constraint is introduced this turn"
+            },
+            {
+              "id": "D3",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "n/a"
+            },
+            {
+              "id": "D4",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "n/a"
+            },
+            {
+              "id": "D5",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "n/a"
+            },
+            {
+              "id": "D6",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "n/a"
+            },
+            {
+              "id": "D7",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "n/a"
+            },
+            {
+              "id": "D8",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "n/a"
+            },
+            {
+              "id": "D9",
+              "verdict": "met",
+              "sev": "none",
+              "evidence": "single step"
+            },
+            {
+              "id": "D10",
+              "verdict": "met",
+              "sev": "none",
+              "evidence": "appropriately terse in form, though vague in content"
+            },
+            {
+              "id": "E1",
+              "verdict": "gap",
+              "sev": "major",
+              "evidence": "'work' states no pass condition of its own, and doesn't confirm the prior acceptance line still applies"
+            },
+            {
+              "id": "E2",
+              "verdict": "partial",
+              "sev": "minor",
+              "evidence": "measurable only if 'work' maps onto the earlier acceptance criteria, which is never stated"
+            },
+            {
+              "id": "E3",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "n/a"
+            },
+            {
+              "id": "E4",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "n/a"
+            }
+          ],
+          "transformation": [
+            {
+              "id": "E1",
+              "before": "make it work",
+              "after": "implement the --dry-run flag now so it passes the acceptance criteria above",
+              "principle": "A vague success word doesn't inherit a definition from a prior turn automatically \u2014 say explicitly that the earlier acceptance criteria still apply."
+            }
+          ],
+          "fix": "implement the --dry-run flag now so it passes the acceptance criteria above"
+        },
+        {
+          "label": "Floating referent, no message or scope",
+          "score": 65,
+          "verdict": "WEAK",
+          "kind": "chain_step",
+          "date": "2026-08-11",
+          "prompt": "commit this",
+          "why": "Names the right verb (commit) but 'this' has no prior turn to resolve against, and no message or scope is given.",
+          "rubric": [
+            {
+              "id": "D1",
+              "verdict": "partial",
+              "sev": "major",
+              "evidence": "'this' is the first turn in the session \u2014 nothing resolves it"
+            },
+            {
+              "id": "D2",
+              "verdict": "partial",
+              "sev": "major",
+              "evidence": "no commit message or file scope given"
+            },
+            {
+              "id": "D3",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "n/a"
+            },
+            {
+              "id": "D4",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "n/a"
+            },
+            {
+              "id": "D5",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "n/a"
+            },
+            {
+              "id": "D6",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "n/a"
+            },
+            {
+              "id": "D7",
+              "verdict": "met",
+              "sev": "none",
+              "evidence": "phrased as what to do"
+            },
+            {
+              "id": "D8",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "n/a"
+            },
+            {
+              "id": "D9",
+              "verdict": "met",
+              "sev": "none",
+              "evidence": "single step"
+            },
+            {
+              "id": "D10",
+              "verdict": "met",
+              "sev": "none",
+              "evidence": "brief, not over-engineered"
+            },
+            {
+              "id": "E1",
+              "verdict": "partial",
+              "sev": "major",
+              "evidence": "a commit existing is clear, but correctness of its message/scope isn't measurable without more"
+            },
+            {
+              "id": "E2",
+              "verdict": "partial",
+              "sev": "minor",
+              "evidence": "partially measurable (did a commit happen) but not fully (is it the right one)"
+            },
+            {
+              "id": "E3",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "n/a"
+            },
+            {
+              "id": "E4",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "n/a"
+            }
+          ],
+          "transformation": [
+            {
+              "id": "D1",
+              "before": "commit this",
+              "after": "commit the deploy.sh change with a message describing the --dry-run flag",
+              "principle": "Name what 'this' refers to and give a message \u2014 don't leave the target of a destructive-adjacent git op implicit."
+            }
+          ],
+          "fix": "commit the deploy.sh change with a message describing the --dry-run flag"
+        },
+        {
+          "label": "Category word instead of the actual command",
+          "score": 56,
+          "verdict": "WEAK",
+          "kind": "chain_step",
+          "date": "2026-08-11",
+          "prompt": "version-control it to the shared repo",
+          "why": "'version-control' names a category of git operations, not one of them \u2014 commit, push, and opening a PR are all consistent with the wording.",
+          "chain": "Follows 'commit this' in the same session.",
+          "rubric": [
+            {
+              "id": "D1",
+              "verdict": "partial",
+              "sev": "major",
+              "evidence": "'version-control' names a category, not a specific git operation"
+            },
+            {
+              "id": "D2",
+              "verdict": "partial",
+              "sev": "major",
+              "evidence": "'to the shared repo' names a target but not which remote/branch"
+            },
+            {
+              "id": "D3",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "no meaningful output format beyond the git operation itself"
+            },
+            {
+              "id": "D4",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "motivation wouldn't change which git command applies"
+            },
+            {
+              "id": "D5",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "no factual grounding needed"
+            },
+            {
+              "id": "D6",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "no example needed for a one-line directive"
+            },
+            {
+              "id": "D7",
+              "verdict": "met",
+              "sev": "none",
+              "evidence": "phrased as what to do, not what to avoid"
+            },
+            {
+              "id": "D8",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "not a factual-risk task"
+            },
+            {
+              "id": "D9",
+              "verdict": "met",
+              "sev": "none",
+              "evidence": "a single step, not artificially split"
+            },
+            {
+              "id": "D10",
+              "verdict": "met",
+              "sev": "none",
+              "evidence": "brief, not over-engineered"
+            },
+            {
+              "id": "E1",
+              "verdict": "gap",
+              "sev": "major",
+              "evidence": "no notion of 'done' \u2014 a commit-only, a push, and an opened PR are all consistent with the wording"
+            },
+            {
+              "id": "E2",
+              "verdict": "partial",
+              "sev": "major",
+              "evidence": "can't binary-check 'version-controlled' without knowing which git action was meant"
+            },
+            {
+              "id": "E3",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "a single quality axis is at stake here"
+            },
+            {
+              "id": "E4",
+              "verdict": "na",
+              "sev": "none",
+              "evidence": "no new failure mode beyond the verb ambiguity already scored"
+            }
+          ],
+          "transformation": [
+            {
+              "id": "D1",
+              "before": "version-control it",
+              "after": "commit the deploy.sh change with a message describing the --dry-run flag, then push it to origin/main",
+              "principle": "Name the actual git command (commit / push / open a PR) \u2014 a category word forces the model to guess which one you meant."
+            }
+          ],
+          "fix": "commit the deploy.sh change with a message describing the --dry-run flag, then push it to origin/main"
+        }
+      ]
+    }
+  ],
+  "habits_build": [
+    "Replace a vague success word ('work', 'version-control', 'handle it') with the exact action or an explicit acceptance line.",
+    "On the first turn of a git-adjacent ask, name the file/scope and give a message \u2014 don't leave a 'this' with nothing to resolve against.",
+    "When a follow-up turn relies on an earlier acceptance line, say so explicitly rather than assuming the model will re-apply it."
+  ],
+  "habits_have": [
+    "Appropriately terse chain steps ('now push it', 'ok continue') when the referent genuinely resolves from context \u2014 brevity isn't being overused to hide ambiguity.",
+    "When a task is spelled out (the --dry-run flag prompt), it's spelled out completely: scope, format, and a binary acceptance line together."
+  ]
+}

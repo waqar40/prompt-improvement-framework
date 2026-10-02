@@ -68,9 +68,12 @@ printf '===== [%s] branch=%s project=%s root=%s =====\n%s\n\n\n' "$ts" "$identif
 
 # Drop a marker naming the file we just wrote to, keyed by session_id, so record-turn-end.sh
 # (the Stop hook) knows where to attach this turn's "assets-used" block once the turn finishes.
-# Best-effort only — a missing/unwritable marker just means that block gets silently skipped.
+# Line 1 = the journal file path; line 2 = this turn's start time (epoch seconds), so the Stop
+# hook can compute "duration_s" without a second source of truth. Best-effort only — a
+# missing/unwritable marker, or a missing line 2, just means that block (or its duration) gets
+# silently skipped.
 if [ -n "$session_id" ]; then
   BUFFER_DIR="${TMPDIR:-/tmp}/prompt-journal-turn"
-  mkdir -p "$BUFFER_DIR" 2>/dev/null && printf '%s' "$entry_file" > "$BUFFER_DIR/$session_id.journal" 2>/dev/null || true
+  mkdir -p "$BUFFER_DIR" 2>/dev/null && printf '%s\n%s\n' "$entry_file" "$(date +%s)" > "$BUFFER_DIR/$session_id.journal" 2>/dev/null || true
 fi
 exit 0

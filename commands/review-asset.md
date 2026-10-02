@@ -1,5 +1,5 @@
 ---
-description: "Review existing Claude Code assets (skill/agent/hook/command/rule/script — one or a whole .claude/ tree) against the shared quality gate: frontmatter, anatomy, the 7 rubrics, non-destructive permissions, model tier, and a shipped verification. Read-only — reports findings + PASS/FAIL, never edits."
+description: "Review existing Claude Code assets (skill/agent/hook/command/rule/script — one or a whole .claude/ tree) against the shared quality gate: frontmatter, anatomy, the 7 rubrics, non-destructive permissions, model tier, a shipped (on-disk) verification, and plan-first/Responsible AI. Read-only — reports findings + PASS/FAIL, never edits."
 argument-hint: "[<asset-file-or-dir>] [--focus <type|rubric>]   (default: current repo root)"
 allowed-tools: Read, Grep, Glob, Bash
 ---

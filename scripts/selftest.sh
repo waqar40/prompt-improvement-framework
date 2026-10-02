@@ -85,6 +85,7 @@ printf '{"session_id":"%s"}' "$SIDA" | bash "$REPO/scripts/record-turn-end.sh"
 fileA="$(ls "$J7"/*.txt 2>/dev/null | head -1)"
 if [ -n "$fileA" ]; then
   grep -q "^----- assets-used -----$" "$fileA"          && pass "assets-used block appended"              || fail "no assets-used block in $fileA"
+  grep -E -q "^duration_s: [0-9]+$" "$fileA"             && pass "duration_s line recorded"                || fail "duration_s missing/malformed: $(cat "$fileA")"
   grep -q "^skill: prompt-critic ->.*SKILL.md$" "$fileA" && pass "resolved skill path recorded"            || fail "skill line missing/unresolved: $(cat "$fileA")"
   grep -q "^tool: Edit ->.*src/foo.py$" "$fileA"          && pass "Edit file path recorded"                 || fail "Edit line missing: $(cat "$fileA")"
   grep -q "^subagent: code-reviewer -> (unresolved)$" "$fileA" && pass "unresolvable subagent path -> (unresolved)" || fail "subagent line wrong: $(cat "$fileA")"
@@ -94,13 +95,17 @@ else
   fail "no journal file written for case (1)"
 fi
 
-# (2) a turn with no trackable tool use -> Stop must add nothing
+# (2) a turn with NO trackable tool use -> Stop still appends a duration_s-ONLY block (no asset
+# lines) — this is a deliberate behavior change from "no block at all" now that duration is tracked.
 SIDB="selftest-sessB"
 printf '{"prompt":"hi","cwd":"%s","session_id":"%s"}' "$REPO_SIM" "$SIDB" | PROMPT_JOURNAL_DIR="$J7" bash "$REPO/scripts/record-prompt.sh"
-before="$(grep -c "assets-used" "$fileA" 2>/dev/null || echo 0)"
+asset_lines_before="$(grep -cE "^(skill|tool|subagent|mcp): " "$fileA" 2>/dev/null || echo 0)"
+duration_before="$(grep -c "^duration_s: " "$fileA" 2>/dev/null || echo 0)"
 printf '{"session_id":"%s"}' "$SIDB" | bash "$REPO/scripts/record-turn-end.sh"
-after="$(grep -c "assets-used" "$fileA" 2>/dev/null || echo 0)"
-[ "$before" = "$after" ] && pass "no-tool-use turn adds no assets-used block" || fail "unexpected assets-used growth ($before -> $after)"
+asset_lines_after="$(grep -cE "^(skill|tool|subagent|mcp): " "$fileA" 2>/dev/null || echo 0)"
+duration_after="$(grep -c "^duration_s: " "$fileA" 2>/dev/null || echo 0)"
+[ "$asset_lines_before" = "$asset_lines_after" ] && pass "no-tool-use turn adds no new asset lines" || fail "unexpected asset-line growth ($asset_lines_before -> $asset_lines_after)"
+[ "$((duration_after - duration_before))" = "1" ] && pass "no-tool-use turn still gets its own duration_s line" || fail "duration_s count didn't grow by 1 ($duration_before -> $duration_after)"
 
 # (3) a skipped (task-notification) prompt writes no marker; a stray tool event must not leak
 SIDC="selftest-sessC"
@@ -122,6 +127,7 @@ if [ -n "$PS_EXE" ]; then
   printf '{"session_id":"%s"}' "$SIDD" | "$PS_EXE" -NoProfile -File "$REPO/scripts/record-turn-end.ps1"
   fileD="$(ls "$J7"/*.txt 2>/dev/null | xargs grep -l "ps fix bug" 2>/dev/null | head -1)"
   [ -n "$fileD" ] && grep -q "^tool: Edit ->.*x.py$" "$fileD" && pass "ps1 asset-use pipeline appends assets-used block" || fail "ps1 asset-use pipeline did not append a block"
+  [ -n "$fileD" ] && grep -E -q "^duration_s: [0-9]+$" "$fileD" && pass "ps1 pipeline records duration_s" || fail "ps1 pipeline missing duration_s"
 else
   skip "no pwsh/powershell — record-tool-use.ps1/record-turn-end.ps1 parity"
 fi
@@ -236,24 +242,39 @@ bodies = [entries[i+1] for i in range(0, len(entries), 2)]
 def split_assets(body):
     m = re.search(r'\n-{5} assets-used -{5}\n(.*?)\n-{5} end-assets-used -{5}\n', body, re.S)
     if not m:
-        return body.strip(), []
+        return body.strip(), None, []
     prompt_text = body[:m.start()].strip()
-    lines = [l for l in m.group(1).splitlines() if l.strip()]
-    return prompt_text, lines
+    duration = None
+    assets = []
+    for l in m.group(1).splitlines():
+        if not l.strip():
+            continue
+        dm = re.match(r'^duration_s: (\d+)$', l)
+        if dm:
+            duration = int(dm.group(1))
+        else:
+            assets.append(l)
+    return prompt_text, duration, assets
 
 with_block    = [b for b in bodies if 'assets-used' in b]
 without_block = [b for b in bodies if 'assets-used' not in b]
 assert len(with_block) == 2, f"expected 2 entries with an assets-used block, saw {len(with_block)}"
 assert len(without_block) >= 1, "expected at least 1 entry with no assets-used block (the common case)"
 
-prompt_text, assets = split_assets(with_block[1])   # the "now push it" entry
+prompt_text, duration, assets = split_assets(with_block[1])   # the "now push it" entry
 assert prompt_text == "now push it", f"prompt text not cleanly split: {prompt_text!r}"
-assert assets == ["skill: commit-message -> skills/commit-message/SKILL.md"], f"assets lines wrong: {assets}"
+assert duration == 8, f"duration_s not parsed out of the block: {duration!r}"
+assert assets == ["skill: commit-message -> skills/commit-message/SKILL.md"], f"assets lines wrong (duration_s must not leak in): {assets}"
 assert "-----" not in prompt_text, "delimiter leaked into scored prompt text"
 
-# an entry with no block must still parse with an empty assets list and untouched prompt text
-prompt_text2, assets2 = split_assets(without_block[0])
+prompt_text1b, duration1b, assets1b = split_assets(with_block[0])   # the "make it work" entry
+assert duration1b == 45, f"duration_s not parsed for the other block: {duration1b!r}"
+assert assets1b == ["tool: Read -> /tmp/demo/alpha/scripts/deploy.sh"], f"assets lines wrong: {assets1b}"
+
+# an entry with no block must still parse with an empty assets list, duration=None, untouched prompt text
+prompt_text2, duration2, assets2 = split_assets(without_block[0])
 assert assets2 == [], f"expected no assets for a block-less entry, got {assets2}"
+assert duration2 is None, f"expected no duration for a block-less entry, got {duration2!r}"
 assert prompt_text2, "prompt text must not be empty for a block-less entry"
 PY
 else skip "no python3 — assets-used splitting check"; fi
@@ -270,6 +291,46 @@ if [ "$HAVE_PY" -eq 1 ]; then
     grep -q "Coverage:"   "$SB/g.md" && pass "render-guide shows the new Coverage line"  || fail "Coverage line missing from md"
   fi
 else skip "no python3 — render-guide check"; fi
+
+# ---------------------------------------------------------------------------------------------
+section "compute-progress.py — cold-start, mastery graduation, and regression alerts"
+if [ "$HAVE_PY" -eq 1 ]; then
+  PF="$FIX/progress"
+  python3 "$REPO/scripts/compute-progress.py" "$PF/scores-run1.jsonl" --user t --out "$SB/p1.json" >/dev/null 2>&1
+  python3 - "$SB/p1.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert d["cold_start"] is True
+assert d["dimensions"]["D7"]["mastered"] is False, "must not claim mastery during cold_start"
+assert d["focus"]["dimension"] == "D5" and d["focus"]["provisional"] is True
+PY
+  [ $? -eq 0 ] && pass "run1 (cold start): no mastery claims, focus=D5, provisional" || fail "run1 cold-start assertions failed"
+
+  python3 "$REPO/scripts/compute-progress.py" "$PF/scores-through-run2.jsonl" --user t --prev "$SB/p1.json" --out "$SB/p2.json" >/dev/null 2>&1
+  python3 - "$SB/p2.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert d["cold_start"] is False
+assert d["dimensions"]["D7"]["mastered"] is True, "D7 (all-met both checkpoints) should graduate"
+assert d["focus"]["dimension"] == "D5", "focus should stick to D5 (momentum rule)"
+assert d["regression_alerts"] == [], "nothing should regress yet"
+PY
+  [ $? -eq 0 ] && pass "run2: D7 masters, focus stays D5, no regressions yet" || fail "run2 mastery/focus assertions failed"
+
+  python3 "$REPO/scripts/compute-progress.py" "$PF/scores-through-run3.jsonl" --user t --prev "$SB/p2.json" --out "$SB/p3.json" >/dev/null 2>&1
+  python3 - "$SB/p3.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert d["dimensions"]["D7"]["mastered"] is False, "D7 crashed to gap -> demoted"
+assert len(d["regression_alerts"]) == 1 and d["regression_alerts"][0]["dimension"] == "D7", d["regression_alerts"]
+assert d["focus"]["dimension"] == "D5", "focus must not have been disturbed by D7's regression"
+PY
+  [ $? -eq 0 ] && pass "run3: exactly 1 regression alert (D7), focus undisturbed (D5)" || fail "run3 regression-alert assertions failed"
+
+  # Idempotent/deterministic: same input -> byte-identical numeric fields, twice in a row
+  python3 "$REPO/scripts/compute-progress.py" "$PF/scores-through-run3.jsonl" --user t --prev "$SB/p2.json" --out "$SB/p3b.json" >/dev/null 2>&1
+  diff -q "$SB/p3.json" "$SB/p3b.json" >/dev/null 2>&1 && pass "deterministic: re-running on identical inputs is byte-identical" || fail "compute-progress.py is non-deterministic"
+else skip "no python3 — compute-progress.py checks"; fi
 
 # ---------------------------------------------------------------------------------------------
 section "recorder — skips harness task-notification machine-output"

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # ai-gen — Claude Code Stop hook: flushes this turn's buffered asset invocations (written by
-# record-tool-use.sh) into an "assets-used" block appended to the journal entry that
-# record-prompt.sh wrote for the prompt that started this turn. Best-effort and silent: never
-# blocks the turn, and writes nothing if there's no matching prompt entry (e.g. a skipped
-# <task-notification> turn, or a turn that used no trackable tools/assets) — see
-# record-prompt.sh for how the marker this depends on gets written.
+# record-tool-use.sh) and this turn's duration into an "assets-used" block appended to the
+# journal entry that record-prompt.sh wrote for the prompt that started this turn. Best-effort
+# and silent: never blocks the turn, and writes nothing if there's no matching prompt entry
+# (e.g. a skipped <task-notification> turn, or no marker at all) — see record-prompt.sh for how
+# the marker this depends on gets written.
 set -uo pipefail
 
 raw="$(cat)"
@@ -28,20 +28,23 @@ cleanup() { rm -f "$MARKER" "$TOOLS_FILE" 2>/dev/null || true; }
 
 # No prompt was recorded this turn (task-notification skip, empty prompt, or the marker was
 # never written) — discard any buffered tool calls rather than misattribute them to whatever
-# entry happens to be last in the journal file.
+# entry happens to be last in the journal file. Note: unlike before, we no longer bail out just
+# because TOOLS_FILE is empty — a tool-less turn can still carry a duration.
 [ -f "$MARKER" ] || { cleanup; exit 0; }
-[ -s "$TOOLS_FILE" ] || { cleanup; exit 0; }
 
-journal_file="$(cat "$MARKER" 2>/dev/null || true)"
+journal_file="$(sed -n '1p' "$MARKER" 2>/dev/null || true)"
+start_epoch="$(sed -n '2p' "$MARKER" 2>/dev/null || true)"
 [ -n "$journal_file" ] && [ -f "$journal_file" ] || { cleanup; exit 0; }
 
 # Dedupe (kind,name,path) triples and format as one line each:
 #   <kind>: <name> -> <path-or-(unresolved)>
-block="$(
-  if command -v jq >/dev/null 2>&1; then
-    jq -rs 'unique_by([.kind,.name,.path]) | .[] | "\(.kind): \(.name) -> \(if .path == "" then "(unresolved)" else .path end)"' "$TOOLS_FILE" 2>/dev/null
-  elif command -v python3 >/dev/null 2>&1; then
-    python3 -c '
+block=""
+if [ -s "$TOOLS_FILE" ]; then
+  block="$(
+    if command -v jq >/dev/null 2>&1; then
+      jq -rs 'unique_by([.kind,.name,.path]) | .[] | "\(.kind): \(.name) -> \(if .path == "" then "(unresolved)" else .path end)"' "$TOOLS_FILE" 2>/dev/null
+    elif command -v python3 >/dev/null 2>&1; then
+      python3 -c '
 import json, sys
 seen = []
 for line in open(sys.argv[1], encoding="utf-8"):
@@ -59,13 +62,27 @@ for line in open(sys.argv[1], encoding="utf-8"):
     kind, name, path = key
     print(f"{kind}: {name} -> {path or \"(unresolved)\"}")
 ' "$TOOLS_FILE" 2>/dev/null
-  fi
-)"
+    fi
+  )"
+fi
 
-if [ -n "$block" ]; then
+# Duration (best-effort — only if the marker's line 2 is a plain non-negative integer; a
+# missing/corrupt start_epoch just means no duration_s line, never a failure).
+duration_line=""
+case "$start_epoch" in
+  ''|*[!0-9]*) : ;;
+  *)
+    end_epoch="$(date +%s)"
+    duration_s=$((end_epoch - start_epoch))
+    [ "$duration_s" -ge 0 ] && duration_line="duration_s: $duration_s"
+    ;;
+esac
+
+if [ -n "$block" ] || [ -n "$duration_line" ]; then
   {
     printf -- '----- assets-used -----\n'
-    printf '%s\n' "$block"
+    [ -n "$duration_line" ] && printf '%s\n' "$duration_line"
+    [ -n "$block" ] && printf '%s\n' "$block"
     printf -- '----- end-assets-used -----\n'
   } >> "$journal_file"
 fi

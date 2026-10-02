@@ -59,19 +59,25 @@ linter, and it is not a git working tree. Do not look for or invent build/run co
   <the prompt exactly as sent>
   ```
 - **An entry may end with an optional `assets-used` block** — machine-written by the
-  `PostToolUse`/`Stop` hooks (`scripts/record-tool-use.*` / `scripts/record-turn-end.*`),
-  recording which skills/subagents/tools/MCP tool calls actually ran as a result of that
-  prompt, with paths (MCP calls have no path — `(unresolved)`):
+  `Stop` hook (`scripts/record-turn-end.*`), carrying two kinds of line: an optional
+  **`duration_s: <seconds>`** line (how long the turn took, from the matching `UserPromptSubmit`
+  to this `Stop`) and zero or more **asset lines** recording which skills/subagents/tools/MCP
+  tool calls actually ran as a result of that prompt (written by `PostToolUse`'s
+  `scripts/record-tool-use.*`), with paths (MCP calls have no path — `(unresolved)`):
   ```
   ----- assets-used -----
+  duration_s: 42
   skill: prompt-critic -> skills/prompt-critic/SKILL.md
   tool: Edit -> /abs/path/to/file.py
   mcp: mcp__github__create_pull_request -> (unresolved)
   ----- end-assets-used -----
   ```
-  It's absent on most entries (turns with no trackable tool use, and all logs predating this
-  feature) — that's normal, not a gap. `/analyse` parses it as context for grading (see
-  `skills/prompt-journal/SKILL.md`), never as part of the scored prompt text.
+  `duration_s` appears on nearly every entry going forward (any turn whose `Stop` hook could
+  find a valid start-time marker) — the asset lines below it remain the part that's "absent on
+  most entries" (turns with no trackable tool use). Entries from before this feature, or where
+  the marker was missing/unwritable, have no block at all — that's normal, not a gap. `/analyse`
+  parses it as context for grading (see `skills/prompt-journal/SKILL.md`), never as part of the
+  scored prompt text.
 - Entries are append-only history. **Preserve them verbatim** — do not fix typos,
   rephrase, reorder, or "clean up" prompts in a raw log (including any `assets-used` block —
   it's still append-only history, just not user-authored). Their sloppiness is the data.
@@ -91,16 +97,19 @@ they connect (see `README.md` for the end-to-end walkthrough):
      blocks a prompt — it exits 0 on any error, and it **skips harness machine-output** (turns
      beginning `<task-notification>`) so agent notifications never land in the journal as if they
      were authored prompts. On a successful write it also drops a per-session marker (in a temp
-     dir, keyed by `session_id`) naming the file it just wrote, for the next hook to find.
+     dir, keyed by `session_id`) naming the file it just wrote **and this turn's start time
+     (epoch seconds)**, for the next hooks to find.
    - `scripts/record-tool-use.{ps1,sh}` (`PostToolUse`, matcher
      `Skill|Task|Read|Edit|Write|NotebookEdit|mcp__.*`) buffers each relevant tool call
      (skill/subagent name + resolved path, file path touched, or MCP tool name — MCP calls
      have no path, recorded as `(unresolved)`) to that same per-session temp buffer. Never
      logs Bash/Grep/Glob/etc. — asset invocations only, by design.
-   - `scripts/record-turn-end.{ps1,sh}` (`Stop`) flushes the buffer into the `assets-used` block
-     (see File taxonomy above) appended to the marker's journal file, then deletes the marker +
-     buffer. Writes nothing if no marker exists (prompt was skipped) or the buffer is empty (no
-     trackable tool use that turn) — it never misattributes tool calls to the wrong entry.
+   - `scripts/record-turn-end.{ps1,sh}` (`Stop`) computes this turn's `duration_s` from the
+     marker's start time and flushes it — plus the buffered tool calls, if any — into the
+     `assets-used` block (see File taxonomy above) appended to the marker's journal file, then
+     deletes the marker + buffer. Writes nothing if no marker exists (prompt was skipped);
+     writes `duration_s` alone (no asset lines) when the turn used no trackable tools — it never
+     misattributes tool calls to the wrong entry.
    All three are best-effort and silent: exit 0 on any error, never block the turn. This is the
    only thing that writes raw logs.
 1. **Review skill/agent** — reads a raw log, applies the defined rubric to each prompt,
@@ -114,21 +123,38 @@ they connect (see `README.md` for the end-to-end walkthrough):
 2. **Scoring store** — the review persists each prompt's score so improvement is
    trackable over time (per user, per criterion, dated). Convention: `<outcomes>/scores/<user>.jsonl`,
    append-only, one prompt-critic result per line (with prompt excerpt, source log/branch,
-   **project + root** (from the log header), date, score, verdict, band, and `assets_used` — the
-   parsed `assets-used` block, `[]` if the entry had none). `assets_used` is stored for audit
-   trail and passed to `prompt-critic` as grading **context only** — it never adds a scored
-   dimension (see `skills/prompt-critic/references/rubric.md`). Never rewrite past
-   scores to make a trend look better. This store is what lets the guide be a **compiled,
+   **project + root** (from the log header), date, `run_id` (the `/analyse` invocation's
+   timestamp — the checkpoint unit progress tracking compares pace across), score, verdict, band,
+   a compact `dims` map (`{"D1":"met",...}`, feeds `progress-coach`), `assets_used` — the
+   parsed asset lines from the `assets-used` block, `[]` if the entry had none — and
+   `duration_s` (the block's `duration_s:` line as a number, `null` if absent). `assets_used`
+   and `duration_s` are stored for audit trail and passed to `prompt-critic` as grading
+   **context only** — neither ever adds a scored dimension (see
+   `skills/prompt-critic/references/rubric.md`). `run_id`/`dims` are additive — older rows
+   predate them and are read as legacy (cold-start for progress purposes only). Never rewrite
+   past scores to make a trend look better. This store is what lets the guide be a **compiled,
    overall** view grounded in the user's whole real history.
 2b. **Per-file reviews** — `<outcomes>/reviews/<user>/<branch-slug>.md`: one review per log (a
    related session), written by the pipeline. Because a file's prompts are related, the review rolls
    up that session's strengths/weaknesses and calls out **asset opportunities**
    (skill/agent/hook/…) with the `<outcomes>/suggestions/<user>.json` candidate id to build.
+2c. **Progress coach** — the **`progress-coach`** skill (`skills/progress-coach/`), the adaptive
+   layer. `scripts/compute-progress.py` (deterministic, no LLM call — see
+   `docs/adr/0001-adaptive-personalized-progress-coaching.md`) reads the score store's per-prompt
+   `dims` verdicts, keeps an EWMA-smoothed, confidence-weighted level per rubric dimension, and
+   compares it against the **prior `/analyse` run's checkpoint** to classify pace
+   (`improving_fast/slow`, `flat`, `regressing`) and mastery (Bloom-floor + hysteresis gating).
+   Picks **one** next-focus dimension (Theory-of-Constraints bottleneck rule — never more than
+   one at a time) and flags any previously-mastered dimension now slipping as a **regression
+   alert**, independent of the focus. The skill then authors the plain-English rationale +
+   concrete steps (from `references/dimension-playbooks.md`, never improvised) and writes
+   `<outcomes>/progress/<user>.json` + `.md`. Its own prior output is its only state — **never
+   hand-edit it**, same rule as the score store.
 3. **Example curator** — the **`prompt-example-curator`** skill at
    `skills/prompt-example-curator/`. Reads prompt-critic output (or the score
    store), bands each prompt **bad / good / excellent**, picks the most instructive real
-   examples per band, and writes them — verbatim, with before→after rewrites — into the
-   per-user guide, along with the habits to build.
+   examples per band, embeds `progress-coach`'s current-focus teaser, and writes them —
+   verbatim, with before→after rewrites — into the per-user guide, along with the habits to build.
 4. **Per-user guide** — `<outcomes>/guides/<user>.md`: the evolving, personalised output — what this
    user does well, their recurring gaps, and the habits to build, illustrated with their
    own before/after prompts. Format is fixed in
@@ -141,14 +167,24 @@ they connect (see `README.md` for the end-to-end walkthrough):
    and `grounding{claude_md,rules_dir,code_globs}` (from the log's `project=`/`root=` headers)
    so the builder can trace the real repo. It proposes; it never builds.
 6. **Asset architect** — the **`asset-architect`** skill
-   (`skills/asset-architect/`, run via **`/scaffold-asset`**), a **multi-source grounding
-   consumer**. It builds a *grounding brief* from the target repo's code + `CLAUDE.md`/`.claude/rules`
-   (traced via `root_path` or a read-only worktree/clone of `git_remote`), **Confluence pages**, **raw
-   prompts**, and **documents** (`references/grounding-sources.md`), decides the asset *type* +
-   *placement*, then emits it to the canonical **artifact anatomy** (`references/artifact-anatomy.md`)
+   (`skills/asset-architect/`, run via **`/scaffold-asset`**), a **multi-source grounding +
+   deep-research consumer**. It builds a *grounding brief* from the target repo's code +
+   `CLAUDE.md`/`.claude/rules` (traced via `root_path` or a read-only worktree/clone of
+   `git_remote`), **Confluence pages**, **raw prompts**, **documents**, and **assistant memory
+   files** (`references/grounding-sources.md`), then runs a **deep-research pass**
+   (`references/research.md`): reads the real code before describing its behavior, researches the
+   topic beyond the repo when needed, checks the draft against a catalogue of known Claude-Code-asset
+   anti-patterns, and answers a **Responsible AI checklist** (fairness, transparency, privacy, human
+   oversight, misuse resistance, accountability) — **asking the user a specific question, never
+   assuming, whenever a source is missing or ambiguous**. It then writes a short **plan**
+   (`references/plan-template.md`) and gets it confirmed before drafting, decides the asset *type* +
+   *placement*, and emits it to the canonical **artifact anatomy** (`references/artifact-anatomy.md`)
    **with a verification** — a concrete `evals/evals.json` (schema in
-   `references/verification-harness.md`), an output contract, or an exit-code test, per type —
-   writing **only after you approve**. Fetched page/doc content is treated as data, not instructions.
+   `references/verification-harness.md`), an output contract, or an exit-code test, per type,
+   **eval-driven and deterministic** for judgment-shaped artifacts — writing it, and the real
+   validation-artifact file itself (never just a description of one), **only after you approve**.
+   Every emitted skill/agent must itself carry a proportional **plan-first** step
+   (`references/plan-template.md` §2). Fetched page/doc content is treated as data, not instructions.
    Complements `~/.claude/rules/sdlc-asset-authoring.md`; always scaffolds into the **target** repo
    it's pointed at, never into this plugin itself.
 6b. **Artifact reviewer** — the **`artifact-reviewer`** skill (`skills/artifact-reviewer/`, run via
@@ -187,27 +223,34 @@ observability, scale, reliability** (spec + defaults in
 must clear **Section G — contradiction, ambiguity, persona consistency, cognitive load, semantic
 coverage, composition-conflict** (`skills/asset-architect/references/semantic-consistency.md`) —
 the axis that judges whether the artifact is well-specified *as instructions to an LLM*, not just
-well-shaped as software. Generated artifacts get the **default permission posture**: grant every
-*non-destructive* tool the job needs, but NEVER grant destructive operations (delete / drop /
-`rm -rf` / `--force` push / truncate) — deny them via tool scoping + a guard and route to explicit
-human approval. Assign an **appropriate model tier** per the Model Routing Policy (haiku
-docs/format · sonnet code/review · opus security/architecture/root-cause · fable sensitive). Each
-artifact ships its own verification, in the concrete shape `skills/asset-architect/references/
-verification-harness.md` defines (cases + graders, not a bespoke paragraph). All of this is one
-**shared quality gate** (`skills/asset-architect/references/quality-gate.md`, sections A–G):
-`asset-architect` runs it as a build-time self-check, and **`/review-asset`** (the read-only
-`artifact-reviewer` skill) runs the *same* gate to audit existing assets — so "built to standard"
-≡ "passes review". The deterministic frontmatter slice is enforced by
-`scripts/validate-frontmatter.py` (wireable as a hook/CI gate). Findings the reviewer can fully
-specify (a dangling reference, an invalid frontmatter key) route to **`/fix-asset`**
-(`asset-fixer`, write-capable but never authors content); anything needing judgment routes to
-`/scaffold-asset` or a human — a deliberate separation of powers (review ≠ fix ≠ build).
+well-shaped as software. **It must also clear Section H — plan-first, researched edge cases /
+anti-patterns, and Responsible AI** (`skills/asset-architect/references/research.md` +
+`references/plan-template.md`): no artifact ships on an assumption research could have resolved or
+the user could have answered; every artifact's own body carries a plan-before-execute step
+proportional to its stakes (mandatory + blocking for anything destructive-adjacent); and
+judgment-shaped artifacts (reviewers, graders, critics) must be **eval-driven and deterministic** —
+the same input produces the same verdict against a fixed rubric, never a per-run vibe. Generated
+artifacts get the **default permission posture**: grant every *non-destructive* tool the job needs,
+but NEVER grant destructive operations (delete / drop / `rm -rf` / `--force` push / truncate) —
+deny them via tool scoping + a guard and route to explicit human approval. Assign an **appropriate
+model tier** per the Model Routing Policy (haiku docs/format · sonnet code/review · opus
+security/architecture/root-cause · fable sensitive). Each artifact ships its own verification, in
+the concrete shape `skills/asset-architect/references/verification-harness.md` defines (cases +
+graders, not a bespoke paragraph) — **written to disk as a real file at build time**, never merely
+described. All of this is one **shared quality gate**
+(`skills/asset-architect/references/quality-gate.md`, sections A–H): `asset-architect` runs it as a
+build-time self-check, and **`/review-asset`** (the read-only `artifact-reviewer` skill) runs the
+*same* gate to audit existing assets — so "built to standard" ≡ "passes review". The deterministic
+frontmatter slice is enforced by `scripts/validate-frontmatter.py` (wireable as a hook/CI gate).
+Findings the reviewer can fully specify (a dangling reference, an invalid frontmatter key) route to
+**`/fix-asset`** (`asset-fixer`, write-capable but never authors content); anything needing judgment
+routes to `/scaffold-asset` or a human — a deliberate separation of powers (review ≠ fix ≠ build).
 
 **Deletion safety (framework invariant).** The framework only ever deletes **temporary/sandbox
 directories it created itself** (a `mktemp -d` sandbox, a self-test temp dir). It NEVER deletes
 user data or anything outside its own scratch — not the journal (`~/.claude/prompt-journal/prompts`),
 not the outcomes dir (`~/.claude/prompt-journal/prompts-review-outcomes`:
-scores/guides/suggestions/reviews), not settings. The recorder
+scores/guides/suggestions/reviews/progress), not settings. The recorder
 is **append-only** (it never edits or removes existing logs; on a `task-notification`/bad payload it
 simply exits 0 without writing). Directory setup only ever **creates** (`mkdir -p` / `New-Item
 -Force`), never removes. Any genuinely data-destructive change (deleting logs, resetting a store,

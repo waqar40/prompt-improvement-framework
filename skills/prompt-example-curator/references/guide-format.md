@@ -29,6 +29,14 @@ separately in `<outcomes>/reviews/<user>/<branch-slug>.md` (written by the pipel
       "from": "<YYYY-MM-DD earliest>", "to": "<YYYY-MM-DD latest>"
     }
   },
+  "focus_plan": {
+    "dimension": "<D1-D10|E1-E4, or null if no progress data yet>",
+    "label": "<dimension label>",
+    "one_line": "<progress-coach's teaser — one clause of its rationale>",
+    "pace": "improving_fast | improving_slow | flat | regressing | insufficient_data",
+    "regression_count": 0,
+    "provisional": false
+  },
   "sections": [
     {
       "band": "excellent | good | bad",
@@ -40,6 +48,13 @@ separately in `<outcomes>/reviews/<user>/<branch-slug>.md` (written by the pipel
   "habits_have":  ["<recurring strength worth keeping>"]
 }
 ```
+
+`focus_plan` is written verbatim from `progress-coach`'s teaser (Step 5 of `prompt-journal`) —
+the curator never derives it itself. Omit the whole key (not just null fields) if `progress-coach`
+returned nothing (e.g. this repo predates the adaptive-coaching upgrade and has no
+`progress/<user>.json` yet) — the renderer skips the section entirely rather than printing an
+empty one. Full detail (per-dimension levels, concrete steps, regression alerts) lives in
+`<outcomes>/progress/<user>.md`, linked from the rendered teaser, not duplicated here.
 
 ### Example object — the important part
 
@@ -90,6 +105,9 @@ Every example carries a **full 14-row rubric** and a **transformation table**:
 
 - **Snapshot** chips (excellent/good/bad/reviewed) + most-common-gap / strongest-habit +
   a "how to read" legend.
+- **Your Focus Right Now** (only if `focus_plan` is present) — one short paragraph: dimension,
+  the one-line rationale, pace, a regression-alert count if non-zero, and a pointer to the full
+  `progress/<user>.md` plan. Omitted entirely, not printed empty, when `focus_plan` is absent.
 - Three banded sections. Each example renders: header (band · score · verdict · label),
   the verbatim prompt, "Why it lands here", optional "Chain step", the **rubric scorecard
   table** (Rubric dimension | Status | Why), the **transformation table** (Rubric | You

@@ -7,7 +7,8 @@ mean the identical thing. The *shape* each item refers to is in `artifact-anatom
 frontmatter rules are in `sources.md`; the deterministic frontmatter slice is checked by
 `scripts/validate-frontmatter.py`; the instructional-prose axis (Section G) is in
 `semantic-consistency.md`; the concrete verification shape (Section F) is in
-`verification-harness.md`.
+`verification-harness.md`; the research/plan/Responsible-AI axis (Section H) is in `research.md`
+and `plan-template.md`.
 
 ## Severities & the gate
 
@@ -15,9 +16,10 @@ frontmatter rules are in `sources.md`; the deterministic frontmatter slice is ch
 - **major** — a real best-practice miss that will bite; fix unless explicitly deferred.
 - **minor** — polish; note it, don't block.
 
-**Gate result** = `PASS` only if there are **zero blocking** items and every one of the **7 rubrics**
-is `addressed` or a justified `na`. Otherwise `FAIL` (list the blocking/major items + the fix).
-Score is the weighted roll-up (below) for tracking; the gate is the pass/fail.
+**Gate result** = `PASS` only if there are **zero blocking** items, every one of the **7 rubrics**
+(Section C) is `addressed` or a justified `na`, and all **4 Section H checks** are answered or a
+justified `na`. Otherwise `FAIL` (list the blocking/major items + the fix). Score is the weighted
+roll-up (below) for tracking; the gate is the pass/fail.
 
 ## A. Frontmatter (deterministic — `validate-frontmatter.py`)
 
@@ -71,11 +73,28 @@ Score is the weighted roll-up (below) for tracking; the gate is the pass/fail.
 - [ ] **G6 composition conflict** — every file the artifact references (skill `references/` table, agent's "follow `~/.claude/skills/...`", command's "read `<skill>.md`") exists and doesn't say something the referencing body contradicts — *blocking if dangling or the drift changes a pass/fail or destructive-action gate, else major*
 - [ ] **G7 custom checks** — if `<repo>/.claude/diagnostics.md` (or `.claude/rules/diagnostics.md`) exists, every NEVER/ALWAYS line in it is checked and folded in at the severity it states — *severity as stated, default minor*
 
+## H. Research, plan-first, and Responsible AI (per `research.md` + `plan-template.md`)
+
+- [ ] **H1 plan-first** — the artifact's own body instructs its executor to state a plan proportional
+  to its stakes before acting (one line for simple read-only work; an explicit step for multi-step/
+  write-capable work; a mandatory blocking plan + human-approval gate for destructive-adjacent work)
+  — *blocking if destructive-adjacent and missing, major otherwise*
+- [ ] **H2 edge cases / anti-patterns researched** — the presented summary names which rows of
+  `research.md`'s anti-pattern table apply to this artifact and how the draft avoids each — *major
+  if a nontrivial artifact's summary is silent on this*
+- [ ] **H3 Responsible AI checklist answered** — fairness, transparency, privacy, human oversight,
+  misuse resistance, accountability are each answered (or "n/a — because…") in the summary —
+  *blocking on a real gap (e.g. a destructive action with no human-oversight answer), major otherwise*
+- [ ] **H4 validation artifact actually generated** — the Section F verification exists as a **real
+  file on disk** (`evals/evals.json`, a sample-payload test, a self-test script), not merely
+  described in prose, and judgment-shaped artifacts are eval-driven and deterministic (same input →
+  same verdict against a fixed rubric) — *blocking if the described verification wasn't written*
+
 ## Scorecard & roll-up (for tracking, mirrors prompt-critic)
 
-Grade each section A–G: `met` (full), `partial` (half), `gap` (0), `na` (excluded). Weights:
-A=3, B=3, C=4 (the rubric block), D=3, E=2, F=3, G=3. `score = round(100 * Σ(weight·pts) / Σ(weight of non-na))`.
-Report: `{score, gate: PASS|FAIL, blocking:[…], major:[…], minor:[…], rubric_coverage:{7 dims}, semantic_coverage:{6 G-checks}}`
+Grade each section A–H: `met` (full), `partial` (half), `gap` (0), `na` (excluded). Weights:
+A=3, B=3, C=4 (the rubric block), D=3, E=2, F=3, G=3, H=3. `score = round(100 * Σ(weight·pts) / Σ(weight of non-na))`.
+Report: `{score, gate: PASS|FAIL, blocking:[…], major:[…], minor:[…], rubric_coverage:{7 dims}, semantic_coverage:{6 G-checks}, responsible_ai_coverage:{4 H-checks}}`
 then a short markdown summary with each finding as `file:line — issue — fix`. **Never fabricate a
 finding**; cite the exact line. A reviewer proposes fixes but **does not edit** — route
 fully-specified mechanical fixes (dangling reference, invalid frontmatter key, stale table row) to

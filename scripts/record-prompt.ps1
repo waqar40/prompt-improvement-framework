@@ -64,13 +64,17 @@ Add-Content -Path $entryFile -Value $entry -NoNewline -Encoding utf8
 
 # Drop a marker naming the file we just wrote to, keyed by session_id, so record-turn-end.ps1
 # (the Stop hook) knows where to attach this turn's "assets-used" block once the turn finishes.
-# Best-effort only — a missing/unwritable marker just means that block gets silently skipped.
+# Line 1 = the journal file path; line 2 = this turn's start time (epoch seconds), so the Stop
+# hook can compute "duration_s" without a second source of truth. Best-effort only — a
+# missing/unwritable marker, or a missing line 2, just means that block (or its duration) gets
+# silently skipped.
 $sessionId = [string]$data.session_id
 if (-not [string]::IsNullOrWhiteSpace($sessionId)) {
     try {
         $bufferDir = Join-Path ([System.IO.Path]::GetTempPath()) 'prompt-journal-turn'
         New-Item -ItemType Directory -Force -Path $bufferDir | Out-Null
-        Set-Content -Path (Join-Path $bufferDir "$sessionId.journal") -Value $entryFile -NoNewline -Encoding utf8
+        $startEpoch = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+        Set-Content -Path (Join-Path $bufferDir "$sessionId.journal") -Value "$entryFile`n$startEpoch" -NoNewline -Encoding utf8
     } catch { }   # never let marker bookkeeping fail the recorder itself
 }
 exit 0

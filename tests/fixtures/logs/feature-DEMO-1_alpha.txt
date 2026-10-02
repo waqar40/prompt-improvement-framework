@@ -7,6 +7,7 @@ make it work
 
 
 ----- assets-used -----
+duration_s: 45
 tool: Read -> /tmp/demo/alpha/scripts/deploy.sh
 ----- end-assets-used -----
 
@@ -16,6 +17,7 @@ now push it
 
 
 ----- assets-used -----
+duration_s: 8
 skill: commit-message -> skills/commit-message/SKILL.md
 ----- end-assets-used -----
 

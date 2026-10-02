@@ -8,7 +8,7 @@ to this skeleton. Per-type frontmatter rules live in `references/sources.md`; th
 Distilled from *Claude Code & Desktop — The Complete Engineering Guide* (v1.0, Jul 2026) and the
 official docs (`code.claude.com/docs`, `agentskills.io`); reconciled with `~/.claude/rules/sdlc-asset-authoring.md`.
 
-## The three laws every artifact obeys
+## The four laws every artifact obeys
 
 1. **Context is the scarce resource.** Load on demand, keep bodies short, push volume into
    subagents, prefer a description over a body. (Guide, "the master constraint".)
@@ -16,7 +16,14 @@ official docs (`code.claude.com/docs`, `agentskills.io`); reconciled with `~/.cl
    skills & subagents are probabilistic (the model chooses). A "must happen every time" is a
    **hook**, never a prompt. A "know how to do X" is a **skill**.
 3. **Ship a way to verify.** Every artifact carries its own check (see *Verification* per type).
-   "Looks done" is not done — the EDD discipline: give the agent an oracle it can run.
+   "Looks done" is not done — the EDD discipline: give the agent an oracle it can run. The
+   verification must be a **real file written to disk**, not a paragraph describing one
+   (`references/verification-harness.md`).
+4. **Plan before execute.** Every artifact's own body instructs its executor to state a plan
+   proportional to its stakes before acting — one line for a simple read-only lookup, an explicit
+   early step for anything multi-step or write-capable, and a mandatory blocking plan + human
+   approval gate for anything destructive-adjacent (`references/plan-template.md` §2). This is
+   gate check H1 — missing it is not a style nit, it's a failed check.
 
 ## Universal anatomy (every type)
 
@@ -43,6 +50,13 @@ bar for a production artifact.
 | **Observability** | Emits a machine-readable result a gate/human can read; logs what it did (structured, with a correlation id where it matters); the verification doubles as observability; OTel where the layer supports it. |
 | **Scale** | Works over many items (fan-out / parallel subagents / headless `claude -p`); **no silent caps** — `log()` what was dropped; idempotent so re-runs don't double-do. |
 | **Reliability** | Deterministic where it must be (make it a hook, not a prompt); idempotent; **fails safe** (e.g. a UserPromptSubmit hook exits 0 on error so it never blocks); graceful fallback; zero destructive side effects. |
+
+Beyond these seven **software**-quality rubrics, gate **Section H** (`quality-gate.md`) checks a
+separate axis for every artifact: a proportional **plan-first** step (law 4, above), the
+**edge-case/anti-pattern** check, and the **Responsible AI** checklist (fairness, transparency,
+privacy, human oversight, misuse resistance, accountability) — see `references/research.md`.
+Judgment-shaped artifacts (reviewers, graders, critics) must be **eval-driven and deterministic**:
+the same input produces the same verdict, against a fixed rubric, not a per-run vibe.
 
 ## Default permission posture — capable, never destructive
 
@@ -212,4 +226,8 @@ repos. Structure: `.claude-plugin/plugin.json`, `skills/`, `agents/`, `hooks/hoo
 - **Where?** `references/placement.md` — smallest scope; localize by reading the target repo's
   CLAUDE.md + `.claude/rules`. Precedence: CLAUDE.md additive; skills/agents override by name
   (managed > user > project); hooks all fire (no winner).
+- **What to research first?** `references/research.md` — code grounding, topic research, the
+  anti-pattern table, and the Responsible AI checklist. Never assume what this can answer.
+- **What to plan before drafting?** `references/plan-template.md` — the written plan this skill
+  presents before drafting, and the plan-first step every scaffolded artifact must itself carry.
 - **Never duplicate** an existing capability — extend it (pre-creation checklist, `sdlc-asset-authoring.md`).
